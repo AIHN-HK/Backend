@@ -1,0 +1,171 @@
+name: Deploy Server to VPS (Docker)
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  build-and-deploy:
+    name: Build Docker Image and Deploy
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/sorixtech/aihn-backend
+          tags: |
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Add VPS to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ vars.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to VPS
+        env:
+          SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
+          IMAGE_TAG: ghcr.io/sorixtech/aihn-backend:${{ steps.meta.outputs.version }}
+        run: |
+          ssh -p $SSH_PORT root@${{ vars.VPS_HOST }} << ENDSSH
+            set -e
+            cd ${{ vars.APP_DIR }}
+
+            # Ensure directories exist for volume mounts (Docker will create them as root otherwise)
+            mkdir -p public/exports
+
+            # Log in to GitHub Container Registry
+            echo "${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull the exact image version
+            docker pull $IMAGE_TAG
+
+            # Check migration status first
+            echo "Checking migration status..."
+            docker run --rm \
+              --network host \
+              -e "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
+              $IMAGE_TAG \
+              npx prisma migrate status || echo "Migration check completed"
+
+            # Run database migrations BEFORE stopping old container
+            echo "Running database migrations..."
+            if ! docker run --rm \
+              --network host \
+              -e "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
+              $IMAGE_TAG \
+              npx prisma migrate deploy; then
+              echo "❌ Migration failed! Deployment aborted. Old container still running."
+              exit 1
+            fi
+
+            # Only stop old container if migrations succeeded
+            echo "✅ Migrations successful, deploying new container..."
+            docker stop aihn-backend || true
+            docker rm aihn-backend || true
+
+            # Run new container with environment variables
+            docker run -d \
+              --name aihn-backend \
+              --restart unless-stopped \
+              --network host \
+              --dns 8.8.8.8 \
+              --dns 1.1.1.1 \
+              -v ${{ vars.APP_DIR }}/public/exports:/app/public/exports \
+              -e "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
+              -e "PORT=${{ vars.PORT }}" \
+              -e "API_VERSION=${{ vars.API_VERSION }}" \
+              -e "JWT_ACCESS_SECRET=${{ secrets.JWT_ACCESS_SECRET }}" \
+              -e "JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}" \
+              -e "JWT_ACCESS_EXPIRATION=${{ secrets.JWT_ACCESS_EXPIRATION }}" \
+              -e "JWT_REFRESH_EXPIRATION=${{ secrets.JWT_REFRESH_EXPIRATION }}" \
+              -e "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" \
+              -e "MAIL_HOST=${{ vars.MAIL_HOST }}" \
+              -e "MAIL_PORT=${{ vars.MAIL_PORT }}" \
+              -e "MAIL_USER=${{ vars.MAIL_USER }}" \
+              -e "MAIL_PASS=${{ secrets.MAIL_PASS }}" \
+              -e "MAIL_FROM=${{ vars.MAIL_FROM }}" \
+              -e "SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}" \
+              -e "REDIS_HOST=${{ vars.REDIS_HOST }}" \
+              -e "REDIS_PORT=${{ vars.REDIS_PORT }}" \
+              -e "REDIS_PASSWORD=${{ vars.REDIS_PASSWORD }}" \
+              -e "ANSWER_V2_LOCK_TTL_MS=5000" \
+              -e "ANSWER_V2_LOCK_WAIT_MS=800" \
+              -e "ANSWER_V2_LOCK_POLL_MS=40" \
+              -e "LOGIN_MAX_CONCURRENT=20" \
+              -e "LOGIN_QUEUE_MAX_WAIT_MS=1500" \
+              -e "LOGIN_QUEUE_POLL_INTERVAL_MS=50" \
+              -e "LOG_LEVEL=debug" \
+              -e "NODE_ENV=production" \
+              $IMAGE_TAG
+
+            # Comprehensive cleanup to prevent disk space issues
+            echo "🧹 Cleaning up Docker resources..."
+            
+            # Remove old images (keep latest + 1 previous for rollback)
+            docker images ghcr.io/sorixtech/aihn-backend --format "{{.ID}}" | \
+              tail -n +3 | \
+              xargs -r docker rmi -f 2>/dev/null || true
+            
+            # Remove dangling images (untagged intermediate layers)
+            docker image prune -f || true
+            
+            # Remove stopped containers older than 1 hour
+            docker container prune -f --filter "until=1h" || true
+            
+            # Remove unused build cache (keep last 24h)
+            docker builder prune -f --filter "until=24h" || true
+            
+            # Remove unused volumes (be careful - only removes truly unused ones)
+            docker volume prune -f || true
+            
+            # Remove unused networks
+            docker network prune -f || true
+            
+            # Show disk usage summary
+            echo "📊 Docker disk usage:"
+            docker system df
+            
+            echo "💾 VPS disk usage:"
+            df -h / | grep -v Filesystem
+
+            echo "✅ Deployment complete"
+            docker ps --filter "name=aihn-backend"
+          ENDSSH

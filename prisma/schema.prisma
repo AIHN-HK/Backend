@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  fullname      String
+  role          String         @default("USER")
+  password      String
+  email         String         @unique
+  yob           DateTime
+  phone         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @default(now())
+  address       String?
+  gender        String?
+  class         Int?
+  attempts      Attempt[]
+  chatSessions  ChatSession[]
+  refreshTokens RefreshToken[]
+}
+
+model Otp {
+  email     String
+  code      String
+  type      OtpType
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  expiresAt DateTime
+  userId    Int
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  @@index([userId])
+
+}
+
+model Question {
+  id        Int                @id @default(autoincrement())
+  content   String
+  type      String
+  createdAt DateTime           @default(now())
+  dimension QuestionDimension?
+  answers   Answer[]
+}
+
+model Attempt {
+  id             Int           @id @default(autoincrement())
+  totalQuestions Int
+  createdAt      DateTime      @default(now())
+  finishAt       DateTime?
+  userId         Int?
+  answers        Answer[]
+  user           User?         @relation(fields: [userId], references: [id])
+  chatSessions   ChatSession[]
+  result         Result?
+  snapshots      SnapShot?
+
+  @@index([userId, finishAt, createdAt, id])
+}
+
+model Answer {
+  id          Int      @id @default(autoincrement())
+  attemptId   Int
+  questionId  Int
+  answerValue Int
+  attempt     Attempt  @relation(fields: [attemptId], references: [id])
+  question    Question @relation(fields: [questionId], references: [id])
+
+  @@unique([attemptId, questionId])
+}
+
+model Result {
+  id        Int     @id @default(autoincrement())
+  attemptId Int     @unique
+  scoreR    Int
+  scoreI    Int
+  scoreA    Int
+  scoreS    Int
+  scoreE    Int
+  scoreC    Int
+  topCode   String
+  attempt   Attempt @relation(fields: [attemptId], references: [id])
+}
+
+model ChatSession {
+  id        Int               @id @default(autoincrement())
+  userId    Int
+  socketId  String
+  status    ChatSessionStatus @default(ACTIVE)
+  createdAt DateTime          @default(now())
+  closedAt  DateTime?
+  title     String?
+  attemptId Int
+  summary   String?
+  messages  ChatMessage[]
+  attempt   Attempt           @relation(fields: [attemptId], references: [id])
+  user      User              @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([attemptId])
+}
+
+model ChatMessage {
+  id         Int         @id @default(autoincrement())
+  sessionId  Int
+  content    String
+  createdAt  DateTime    @default(now())
+  role       ChatRole?
+  checkpoint Int         @default(0)
+  session    ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+}
+
+model SnapShot {
+  id        Int     @id @default(autoincrement())
+  attemptId Int     @unique
+  snapshot  Json
+  attempt   Attempt @relation(fields: [attemptId], references: [id])
+}
+
+model Priority {
+  id       Int    @id @default(autoincrement())
+  type     String
+  priority Int
+}
+
+model TopCode {
+  id          Int     @id @default(autoincrement())
+  code        String  @unique
+  title       String
+  personality Json
+  strengths   Json
+  weaknesses  Json
+  careers     Json
+  description String?
+}
+
+model SampleTable {
+  id   Int    @id @default(autoincrement())
+  name String
+}
+
+model HollandCase {
+  id          Int     @id @default(autoincrement())
+  condition   String
+  code        String  @unique
+  title       String
+  personality Json
+  strengths   Json
+  weaknesses  Json
+  careers     Json
+  description String?
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum ChatRole {
+  user
+  assistant
+}
+
+enum QuestionType {
+  R
+  I
+  A
+  S
+  E
+  C
+}
+
+enum QuestionDimension {
+  PERSONA
+  ABILITY
+  INTEREST
+}
+
+/// /////////////////////////////////////////////////
+/// /////////////////////////////////////////////////
+enum OtpType {
+  REGISTER
+  FORGOT_PASSWORD
+}
+
+enum ChatSessionStatus {
+  ACTIVE
+  CLOSED
+}
