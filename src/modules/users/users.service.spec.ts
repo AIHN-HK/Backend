@@ -1,98 +1,69 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UsersRepository } from './users.repository';
 
-describe('UsersService', () => {
+const makeUser = (id: number) => ({
+  id,
+  fullname: `Student ${id}`,
+  email: `${id}@example.test`,
+  password: 'secret',
+  role: 'USER',
+  yob: new Date('2009-01-01'),
+  phone: '0901234567',
+  address: null,
+  gender: null,
+  class: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
+
+describe('personal profiles', () => {
+  let users: Map<number, ReturnType<typeof makeUser>>;
   let service: UsersService;
-  let repository: UsersRepository;
-
-  const mockUser = {
-    id: '1',
-    email: 'test@example.com',
-    password: 'hashedPassword',
-    firstName: 'John',
-    lastName: 'Doe',
-    isActive: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  const mockUsersRepository = {
-    findById: jest.fn(),
-    update: jest.fn(),
-  };
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        UsersService,
-        {
-          provide: UsersRepository,
-          useValue: mockUsersRepository,
-        },
-      ],
-    }).compile();
-
-    service = module.get<UsersService>(UsersService);
-    repository = module.get<UsersRepository>(UsersRepository);
+  beforeEach(() => {
+    users = new Map([
+      [1, makeUser(1)],
+      [2, makeUser(2)],
+    ]);
+    const repository = {
+      findById: async (id: number) => users.get(id) ?? null,
+      update: async (id: number, data: object) => {
+        if (!users.has(id)) throw { code: 'P2025' };
+        const updated = { ...users.get(id)!, ...data };
+        users.set(id, updated);
+        return updated;
+      },
+    } as unknown as UsersRepository;
+    // Poisoned cache must never override authoritative profile data.
+    const staleCache = {
+      getOrSet: async () => makeUser(2),
+      setEx: async () => {
+        throw new Error('Redis offline');
+      },
+    };
+    service = new (UsersService as any)(repository, staleCache);
   });
-
-  afterEach(() => {
-    jest.clearAllMocks();
+  it('reads the requested user, with nullable fields and no sensitive data', async () => {
+    const result = await service.findById(1);
+    expect(result.fullname).toBe('Student 1');
+    expect(result.gender).toBeNull();
+    expect(result).not.toHaveProperty('password');
+    expect(result).not.toHaveProperty('role');
+    expect(result).not.toHaveProperty('id');
   });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  it('PATCH followed by GET reads new DB data despite stale/offline Redis', async () => {
+    const result = await service.update(1, {
+      fullname: 'Updated',
+      phone: '0901234567',
+    });
+    expect(result.fullname).toBe('Updated');
+    expect((await service.findById(1)).fullname).toBe('Updated');
+    expect((await service.findById(2)).fullname).toBe('Student 2');
   });
-
-  describe('findById', () => {
-    it('should return a user without password', async () => {
-      mockUsersRepository.findById.mockResolvedValue(mockUser);
-
-      const result = await service.findById('1');
-
-      expect(result).toEqual({
-        id: mockUser.id,
-        email: mockUser.email,
-        firstName: mockUser.firstName,
-        lastName: mockUser.lastName,
-        isActive: mockUser.isActive,
-        createdAt: mockUser.createdAt,
-        updatedAt: mockUser.updatedAt,
-      });
-      expect(result).not.toHaveProperty('password');
-      expect(mockUsersRepository.findById).toHaveBeenCalledWith('1');
-    });
-
-    it('should throw NotFoundException when user not found', async () => {
-      mockUsersRepository.findById.mockResolvedValue(null);
-
-      await expect(service.findById('999')).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe('update', () => {
-    it('should update and return user without password', async () => {
-      const updateDto = { firstName: 'Jane' };
-      const updatedUser = { ...mockUser, ...updateDto };
-
-      mockUsersRepository.findById.mockResolvedValue(mockUser);
-      mockUsersRepository.update.mockResolvedValue(updatedUser);
-
-      const result = await service.update('1', updateDto);
-
-      expect(result.firstName).toBe('Jane');
-      expect(result).not.toHaveProperty('password');
-      expect(mockUsersRepository.update).toHaveBeenCalledWith('1', updateDto);
-    });
-
-    it('should throw NotFoundException when updating non-existent user', async () => {
-      mockUsersRepository.findById.mockResolvedValue(null);
-
-      await expect(service.update('999', {})).rejects.toThrow(
-        NotFoundException,
-      );
-    });
+  it('rejects missing users on read and update', async () => {
+    await expect(service.findById(99)).rejects.toThrow(NotFoundException);
+    await expect(
+      service.update(99, { fullname: 'A', phone: '0901234567' }),
+    ).rejects.toThrow(NotFoundException);
   });
 });

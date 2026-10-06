@@ -12,8 +12,7 @@ import { TestSessionService } from './test-session.service';
 import { ResponseMessage } from 'src/core/decorators/response-message.decorator';
 import { Public } from 'src/core/decorators/public.decorator';
 import { CurrentUser } from 'src/core/decorators/current-user.decorator';
-import { ApiBearerAuth } from '@nestjs/swagger/dist/decorators/api-bearer.decorator';
-import { ApiQuery } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 
 // import { Session } from 'inspector/promises';
 @Controller('test-session')

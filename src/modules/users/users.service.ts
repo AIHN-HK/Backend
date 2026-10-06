@@ -2,45 +2,38 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { UsersRepository } from './users.repository';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { mapUserToProfileDto } from './user.mapper';
-import { RedisService } from 'src/core/redis/redis.service';
 
 @Injectable()
 export class UsersService {
-  constructor(
-    private readonly usersRepository: UsersRepository,
-    private readonly redisService: RedisService,
-  ) {}
+  constructor(private readonly usersRepository: UsersRepository) {}
 
   async findById(id: number) {
-    const user = await this.redisService.getOrSet(
-      `user:${id}`,
-      600,
-      async () => {
-        const u = await this.usersRepository.findById(id);
-
-        if (!u) {
-          throw new NotFoundException('User not found');
-        }
-        return u;
-      },
-    );
+    // Read authoritative data: cache fills racing with PATCH can restore stale profiles.
+    const user = await this.usersRepository.findById(id);
+    if (!user) throw new NotFoundException('User not found');
     return mapUserToProfileDto(user);
   }
 
   async update(id: number, updateUserDto: UpdateUserDto) {
+    // Explicit allowlist also protects callers outside the HTTP validation boundary.
+    const {
+      fullname,
+      phone,
+      address,
+      gender,
+      class: schoolClass,
+    } = updateUserDto;
     try {
-      const updatedUser = await this.usersRepository.update(id, updateUserDto);
-      await this.redisService.setEx(
-        `user:${id}`,
-        300,
-        JSON.stringify(updatedUser),
-      );
-
-      return mapUserToProfileDto(updatedUser);
+      const user = await this.usersRepository.update(id, {
+        fullname,
+        phone,
+        address,
+        gender,
+        class: schoolClass,
+      });
+      return mapUserToProfileDto(user);
     } catch (error) {
-      if (error.code === 'P2025') {
-        throw new NotFoundException('User not found');
-      }
+      if (error.code === 'P2025') throw new NotFoundException('User not found');
       throw error;
     }
   }

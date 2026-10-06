@@ -5,15 +5,15 @@ export class UserProfileResponseDto {
   @IsString()
   fullname: string;
   @IsString()
-  phone?: string;
+  phone: string | null;
   @IsInt()
   age?: number;
   @IsString()
-  address?: string;
+  address: string | null;
   @IsEnum(Gender)
-  gender?: Gender;
+  gender: Gender | null;
   @IsString()
   email: string;
   @IsInt()
-  class?: number;
+  class: number | null;
 }

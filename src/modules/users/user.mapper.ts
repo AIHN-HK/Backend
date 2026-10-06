@@ -11,7 +11,7 @@ export function mapUserToProfileDto(user: User): UserProfileResponseDto {
     age: currentYear - yob,
     phone: user.phone,
     address: user.address,
-    gender: (user.gender as Gender) ?? Gender.OTHER,
+    gender: (user.gender as Gender) ?? null,
     email: user.email,
     class: user.class,
   };

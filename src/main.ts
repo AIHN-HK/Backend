@@ -49,7 +49,7 @@ async function bootstrap() {
     customCss: '.swagger-ui .topbar { display: none }',
   });
   app.enableCors({
-    origin: configService.get<string>('CORS_ORIGINS')?.split(',') || '*',
+    origin: configService.get<string>('CORS_ORIGINS')?.split(',') || true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });

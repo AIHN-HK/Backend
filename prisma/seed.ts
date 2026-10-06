@@ -37,15 +37,6 @@ async function main() {
     },
   ];
 
-  for (const item of descriptions) {
-    await prisma.topCode.update({
-      where: { code: item.code },
-      data: { description: item.description },
-    });
-  }
-
-  console.log('✅ TopCode descriptions updated.');
-
   // 1. SEED BẢNG TOPCODE (DỮ LIỆU TÍNH CÁCH & NGHỀ NGHIỆP)
   const riasecProfiles = [
     {
@@ -233,6 +224,14 @@ async function main() {
     });
   }
   console.log('✅ TopCode table seeded.');
+
+  for (const item of descriptions) {
+    await prisma.topCode.update({
+      where: { code: item.code },
+      data: { description: item.description },
+    });
+  }
+  console.log('✅ TopCode descriptions updated.');
 
   // 2. SEED BẢNG QUESTION
   const questionCount = await prisma.question.count();
