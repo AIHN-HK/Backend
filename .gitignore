@@ -38,3 +38,7 @@ Thumbs.db
 # Caches & build info
 .eslintcache
 *.tsbuildinfo
+
+# Project documentation and local tooling
+/docs/
+/.serena/

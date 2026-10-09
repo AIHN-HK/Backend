@@ -36,6 +36,9 @@ describe('personal profiles', () => {
     } as unknown as UsersRepository;
     // Poisoned cache must never override authoritative profile data.
     const staleCache = {
+      del: async () => {
+        throw new Error('Redis offline');
+      },
       getOrSet: async () => makeUser(2),
       setEx: async () => {
         throw new Error('Redis offline');

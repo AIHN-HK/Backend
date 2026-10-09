@@ -44,6 +44,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       const payload = this.jwtService.verify(token);
+      const owner = await this.prisma.user.findUnique({
+        where: { id: payload.userId },
+      });
+      if (!owner) throw new Error('User not found');
       client.data.user = payload;
       const userId = payload.userId;
 
@@ -142,13 +146,54 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.warn(`WS client disconnected: ${client.id}`);
   }
 
+  private async authorizeSession(socket: Socket, sessionId: number) {
+    try {
+      const payload = this.jwtService.verify(socket.handshake.auth.token);
+      if (payload.userId !== socket.data.user?.userId)
+        throw new Error('Account changed');
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.userId },
+      });
+      if (!user) throw new Error('User not found');
+      await this.chatService.assertSessionOwner(sessionId, payload.userId);
+      return true;
+    } catch {
+      socket.emit('error', {
+        message: 'Session access denied or authentication expired',
+      });
+      return false;
+    }
+  }
+
+  @SubscribeMessage('refresh_auth')
+  async handleRefreshAuth(
+    @MessageBody() data: { token: string },
+    @ConnectedSocket() socket: Socket,
+  ) {
+    try {
+      const payload = this.jwtService.verify(data.token);
+      if (payload.userId !== socket.data.user?.userId)
+        throw new Error('Account changed');
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.userId },
+      });
+      if (!user) throw new Error('User not found');
+      socket.handshake.auth.token = data.token;
+      socket.emit('auth_refreshed');
+    } catch {
+      socket.emit('error', { message: 'Authentication renewal rejected' });
+    }
+  }
+
   @SubscribeMessage('send_message')
   async handleMessage(
     @MessageBody() payload: ClientSendMessage,
     @ConnectedSocket() socket: Socket,
   ) {
+    if (!(await this.authorizeSession(socket, payload.sessionId))) return;
     if (payload.sessionId && socket.data.sessionId !== payload.sessionId) {
-      if (socket.data.sessionId) socket.leave(`session-${socket.data.sessionId}`);
+      if (socket.data.sessionId)
+        socket.leave(`session-${socket.data.sessionId}`);
       socket.join(`session-${payload.sessionId}`);
       socket.data.sessionId = payload.sessionId;
     }
@@ -173,8 +218,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     },
     @ConnectedSocket() socket: Socket,
   ) {
+    if (!(await this.authorizeSession(socket, data.sessionId))) return;
     if (data.sessionId && socket.data.sessionId !== data.sessionId) {
-      if (socket.data.sessionId) socket.leave(`session-${socket.data.sessionId}`);
+      if (socket.data.sessionId)
+        socket.leave(`session-${socket.data.sessionId}`);
       socket.join(`session-${data.sessionId}`);
       socket.data.sessionId = data.sessionId;
     }
@@ -231,11 +278,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('stop_generation')
-  handleStop(
+  async handleStop(
     @MessageBody() data: { sessionId: number },
     @ConnectedSocket() socket: Socket,
   ) {
-    this.chatService.stopGeneration(data.sessionId);
+    if (!(await this.authorizeSession(socket, data.sessionId))) return;
+    await this.chatService.stopGeneration(data.sessionId);
     this.generatingMap.set(data.sessionId, false);
     this.server.to(`session-${data.sessionId}`).emit('generation_stopped', {
       sessionId: data.sessionId,

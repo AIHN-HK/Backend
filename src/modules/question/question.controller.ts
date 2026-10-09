@@ -1,3 +1,5 @@
+import { Roles } from 'src/core/decorators/roles.decorator';
+import { UserRole } from 'src/core/types/user.type';
 import {
   Body,
   Controller,
@@ -17,16 +19,15 @@ import { Public } from 'src/core/decorators/public.decorator';
 @Controller('question')
 export class QuestionController {
   constructor(private readonly questionService: QuestionService) {}
-  @Public()
   @ResponseMessage('Question created successfully')
+  @Roles(UserRole.ADMIN)
   @Post()
   async create(@Body() createQuestionDto: QuestionDto) {
-    this.questionService.createQuestion(createQuestionDto);
     return {
       data: await this.questionService.createQuestion(createQuestionDto),
     };
   }
-  @Public()
+  @Roles(UserRole.ADMIN)
   @Patch(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -42,8 +43,8 @@ export class QuestionController {
       data: await this.questionService.findById(id),
     };
   }
-  @Public()
   @ResponseMessage('Question deleted successfully')
+  @Roles(UserRole.ADMIN)
   @Delete(':id')
   async deleteQuestion(@Param('id', ParseIntPipe) id: number) {
     return {
@@ -59,6 +60,7 @@ export class QuestionController {
     };
   }
   @ResponseMessage('Questions created successfully')
+  @Roles(UserRole.ADMIN)
   @Post('bulk')
   async createManyQuestion(@Body() dto: BulkCreateQuestionDto) {
     return {

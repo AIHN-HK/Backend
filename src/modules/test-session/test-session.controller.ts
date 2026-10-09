@@ -1,3 +1,5 @@
+import { Roles } from 'src/core/decorators/roles.decorator';
+import { UserRole } from 'src/core/types/user.type';
 import {
   Controller,
   Post,
@@ -10,7 +12,6 @@ import {
 } from '@nestjs/common';
 import { TestSessionService } from './test-session.service';
 import { ResponseMessage } from 'src/core/decorators/response-message.decorator';
-import { Public } from 'src/core/decorators/public.decorator';
 import { CurrentUser } from 'src/core/decorators/current-user.decorator';
 import { ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 
@@ -25,8 +26,8 @@ export class TestSessionController {
   async create(@CurrentUser('id') id: number) {
     return await this.sessionService.createSession(id);
   }
-  @Public()
   @ResponseMessage('Session deleted successfully')
+  @Roles(UserRole.ADMIN)
   @Delete(':id')
   async remove(@Param('id', ParseIntPipe) id: number) {
     try {

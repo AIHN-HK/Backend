@@ -1,3 +1,4 @@
+import { Matches } from 'class-validator';
 // send-otp.dto.ts
 import { IsEmail, IsNotEmpty } from 'class-validator';
 
@@ -12,5 +13,6 @@ export class VerifyOtpDto {
   email: string;
 
   @IsNotEmpty()
+  @Matches(/^\d{6}$/)
   otp: string;
 }

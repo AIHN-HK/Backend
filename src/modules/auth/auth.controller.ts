@@ -44,12 +44,14 @@ export class AuthController {
   }
   @Public()
   @ResponseMessage('User registered successfully')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('login')
   @UseGuards(LoginConcurrencyGuard)
   @ResponseMessage('User logged in successfully')
@@ -69,6 +71,7 @@ export class AuthController {
   }
   @Public()
   @ResponseMessage('Password reset successfully')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('/reset-password')
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
@@ -90,6 +93,7 @@ export class AuthController {
     return this.authService.sendForgotPasswordOtp(data.email);
   }
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('/verify-forget-password-otp')
   @ResponseMessage('OTP verified successfully')
   async verifyOtp(@Body() data: VerifyOtpDto) {

@@ -58,6 +58,7 @@ describe('profile HTTP contract', () => {
         {
           provide: RedisService,
           useValue: {
+            del: async () => {},
             getOrSet: async (_k: string, _t: number, fn: () => unknown) => fn(),
             setEx: async () => {},
           },

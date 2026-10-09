@@ -1,3 +1,5 @@
+import { Roles } from 'src/core/decorators/roles.decorator';
+import { UserRole } from 'src/core/types/user.type';
 import { Body, Controller, Get, Put } from '@nestjs/common';
 import { PriorityService } from './priority.service';
 import { ResponseMessage } from 'src/core/decorators/response-message.decorator';
@@ -13,8 +15,8 @@ export class PriorityController {
   async getPriorities() {
     return this.priorityService.getPriorities();
   }
-  @Public()
   @ResponseMessage('Priorities updated successfully')
+  @Roles(UserRole.ADMIN)
   @Put()
   async updatePriorities(@Body() body: UpdatePriorityDto) {
     return this.priorityService.updatePriorities(body);

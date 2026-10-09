@@ -1,4 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from 'src/core/database/prisma.service';
@@ -117,48 +122,24 @@ export class ChatService {
       },
     });
 
-    const cacheKey = `user-context-${session.attempt.userId}`;
-    let cachedContext: any = await this.cacheManager.get(cacheKey);
-
-    let basic_info, test_json_context;
-
-    if (cachedContext) {
-        this.logger.log(`Using cached context for user ${session.attempt.userId}`);
-        basic_info = cachedContext.basic_info;
-        test_json_context = cachedContext.test_json;
-    } else {
-        this.logger.log(`Fetching and caching context for user ${session.attempt.userId}`);
-        const [result, user] = await Promise.all([
-            this.prisma.result.findUnique({
-                where: { attemptId: session.attemptId },
-            }),
-            this.prisma.user.findUnique({
-                where: { id: session.attempt.userId },
-            }),
-        ]);
-
-        if (!result) {
-            throw new Error('Attempt has no result');
-        }
-
-        test_json_context = await this.resultService.getResultRanking(
-            result.attemptId,
-            session.attempt.userId,
-        );
-
-        basic_info = {
-            full_name: user.fullname,
-            age: new Date().getFullYear() - Number(user.yob),
-            address: user.address,
-            status: 'STUDENT',
-        };
-
-        // Cache for 1 hour (3600 seconds)
-        await this.cacheManager.set(cacheKey, {
-            basic_info,
-            test_json: test_json_context
-        }, 3600000); // cache-manager-ioredis usually uses ms or s depending on version, checking standard v2/v3 is often ms.
-    }
+    // Authoritative reads prevent stale profile/attempt context and late cache fills.
+    const [result, user] = await Promise.all([
+      this.prisma.result.findUnique({
+        where: { attemptId: session.attemptId },
+      }),
+      this.prisma.user.findUnique({ where: { id: session.userId } }),
+    ]);
+    if (!result || !user) throw new Error('Attempt has no result or owner');
+    const test_json_context = await this.resultService.getResultRanking(
+      result.attemptId,
+      session.userId,
+    );
+    const basic_info = {
+      full_name: user.fullname,
+      age: new Date().getFullYear() - user.yob.getFullYear(),
+      address: user.address,
+      status: 'STUDENT',
+    };
 
     test_json = test_json_context;
 
@@ -271,7 +252,21 @@ export class ChatService {
       },
     });
   }
-  async getMessage(sessionId: number) {
+  async assertSessionOwner(sessionId: number, userId: number) {
+    if (!Number.isSafeInteger(userId) || userId <= 0)
+      throw new UnauthorizedException();
+    if (!Number.isSafeInteger(sessionId) || sessionId <= 0)
+      throw new ForbiddenException();
+    const session = await this.prisma.chatSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session || session.userId !== userId)
+      throw new ForbiddenException('Session does not belong to you');
+    return session;
+  }
+
+  async getMessage(sessionId: number, userId: number) {
+    await this.assertSessionOwner(sessionId, userId);
     return this.prisma.chatMessage.findMany({
       where: {
         sessionId,

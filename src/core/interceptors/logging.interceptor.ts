@@ -15,7 +15,7 @@ export class LoggingInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
-    const { method, url } = request;
+    const { method, path: url } = request;
     const now = Date.now();
 
     this.logger.log(`Incoming Request: ${method} ${url}`);
@@ -33,7 +33,7 @@ export class LoggingInterceptor implements NestInterceptor {
         const delay = Date.now() - now;
         this.logger.error(
           `Error: ${method} ${url} ${status} - ${delay}ms`,
-          err.stack,
+          'Request failed',
         );
         throw err;
       }),

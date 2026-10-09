@@ -44,8 +44,8 @@ export class MailService {
           text: `OTP của bạn: ${otp} (hết hạn 10 phút)`,
         });
       }
-    } catch (error) {
-      console.error('MAIL ERROR:', error.response?.body || error);
+    } catch {
+      console.error('MAIL ERROR: email delivery failed');
       throw new InternalServerErrorException('Gửi email thất bại');
     }
   }

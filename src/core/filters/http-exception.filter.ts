@@ -51,17 +51,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // log level theo status
     if (status >= 500) {
       this.logger.error(
-        `${request.method} ${request.url}`,
-        exception instanceof Error ? exception.stack : '',
+        `${request.method} ${request.path}`,
+        'Internal request failure',
       );
     } else if (status === 401 || status === 403) {
-      this.logger.warn(`${request.method} ${request.url}`);
+      this.logger.warn(`${request.method} ${request.path}`);
     }
 
     response.status(status).json({
       statusCode: status,
       timestamp: new Date().toISOString(),
-      path: request.url,
+      path: request.path,
       method: request.method,
       ...body,
     });
