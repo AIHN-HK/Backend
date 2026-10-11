@@ -1,12 +1,17 @@
-import { IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { RiasecType } from '../../../core/constants/riasec.type';
 import { QuestionDimension } from 'src/core/constants/dimension';
 export class QuestionDto {
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(2000)
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   content: string;
 
-  @IsString()
+  @IsEnum(RiasecType)
   type: string;
-  @IsString()
+  @IsEnum(QuestionDimension)
   dimension: QuestionDimension;
 }
 export interface QuestionResponse {

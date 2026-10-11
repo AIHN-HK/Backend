@@ -27,11 +27,8 @@ export class AnswerService {
     scores: Record<RiasecCode, number>,
     numberoftype: number,
   ): Promise<string> {
-    const priority = await this.redisService.getOrSet(
-      'priority:all',
-      3600,
-      () => this.priorityRepository.getPriorities(),
-    );
+    // Six authoritative rows avoid an old cache fill undoing admin updates.
+    const priority = await this.priorityRepository.getPriorities();
     const rank = priority.map((p) => ({
       type: p.type,
       score: scores[p.type] || 0,

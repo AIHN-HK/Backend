@@ -30,8 +30,9 @@ export class QuestionService {
       );
       await this.redisService.del('questions:all'); // 👈 invalidate
       return result;
-    } catch {
-      throw new NotFoundException(`Question with id ${id} not found`);
+    } catch (error) {
+      if (error.code === 'P2025') throw new NotFoundException(`Question with id ${id} not found`);
+      throw error;
     }
   }
   async deleteQuestion(id: number) {
@@ -40,7 +41,8 @@ export class QuestionService {
       await this.redisService.del('questions:all');
       return { message: `Session ${id} deleted successfully` };
     } catch (error) {
-      throw new NotFoundException(`Question with id ${id} not found`);
+      if (error.code === 'P2025') throw new NotFoundException(`Question with id ${id} not found`);
+      throw error;
     }
   }
   async findById(id: number) {
@@ -51,14 +53,8 @@ export class QuestionService {
     return mapQuestionToResponse(question);
   }
   async getAllQuestion() {
-    return this.redisService.getOrSet(
-      'questions:all',
-      3600, // 1 giờ
-      async () => {
-        const questions = await this.questionRepository.getALL();
-        return mapGroupedQuestionsToResponse(questions);
-      },
-    );
+    // A delayed old cache fill must not disagree with a new Attempt's count.
+    return mapGroupedQuestionsToResponse(await this.questionRepository.getALL());
   }
 
   async createMany(questions: CreateQuestionDto[]) {

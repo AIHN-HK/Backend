@@ -28,6 +28,7 @@ import { RedisModule } from './core/redis/redis.module';
 import { seconds, ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { BullModule } from '@nestjs/bull';
 import { configValidationSchema } from './core/config/config.validation';
+import { AdminModule } from './modules/admin/admin.module';
 @Module({
   imports: [
     ThrottlerModule.forRoot([
@@ -39,6 +40,7 @@ import { configValidationSchema } from './core/config/config.validation';
     ConfigModule,
     DatabaseModule,
     AuthModule,
+    AdminModule,
     // UsersModule,
     HealthModule,
     QuestionModule,

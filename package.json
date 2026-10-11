@@ -20,7 +20,9 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "admin:bootstrap": "ts-node -r dotenv/config scripts/bootstrap-admin.ts",
-    "test:auth": "jest --config test/jest-auth.json --runInBand"
+    "test:auth": "jest --config test/jest-auth.json --runInBand",
+    "test:admin": "jest --config test/jest-admin.json --runInBand",
+    "test:admin:live": "node test/admin-live-smoke.cjs"
   },
   "prisma": {
     "seed": "node dist/prisma/seed.js"

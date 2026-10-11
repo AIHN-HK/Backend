@@ -26,8 +26,7 @@ export class TestSessionService {
 
   async createSession(id: number) {
     await this.redisService.delByPattern(`history:${id}:*`);
-    const totalQuestions = await this.questionRepository.countQuestions();
-    return this.sessionRepository.create(totalQuestions, id);
+    return this.sessionRepository.create(id);
   }
 
   async deleteSession(id: number) {
