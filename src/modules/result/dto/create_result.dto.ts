@@ -7,7 +7,7 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
-import { RiasecScore, RiasecType } from 'src/core/constants/riasec.type';
+import { RiasecScore, RiasecType } from '../../assessment';
 
 export class CreateResultDto {
   @IsNumber()

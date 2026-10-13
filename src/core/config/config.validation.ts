@@ -15,13 +15,14 @@ export const configValidationSchema = Joi.object({
   REDIS_PORT: Joi.number().default(6379),
   REDIS_PASSWORD: Joi.string().allow('', null).optional(),
   AI_WS_URL: Joi.string()
+    .empty('')
     .uri({ scheme: ['ws', 'wss'] })
     .optional(),
   AI_CONNECT_TIMEOUT_MS: Joi.number().integer().min(100).default(10000),
   AI_IDLE_TIMEOUT_MS: Joi.number().integer().min(100).default(30000),
   AI_MAX_DURATION_MS: Joi.number().integer().min(100).default(120000),
   CHAT_TURN_LEASE_MS: Joi.number().integer().min(3000).default(600000),
-  CORS_ORIGINS: Joi.string().optional(),
+  CORS_ORIGINS: Joi.string().empty('').optional(),
   TRUST_PROXY_HOPS: Joi.number().integer().min(0).default(0),
   LOGIN_MAX_CONCURRENT: Joi.number().integer().min(1).default(20),
   LOGIN_QUEUE_MAX_WAIT_MS: Joi.number().integer().min(1).default(1500),

@@ -2,11 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { SessionRepository } from './test-session.repository';
 
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { AttemptRepository } from '../attempt/attempt.repository';
-import { TopcodeRepository } from '../topcode/topcode.repository';
-import { RiasecScore } from 'src/core/constants/riasec.type';
-import { analyzeRiasec } from 'src/core/services/analyzeRiasec';
-import { ResultRepository } from '../result/result.repository';
+import { AttemptRepository } from '../attempt';
+import { TopcodeRepository } from '../topcode';
+import { RiasecScore } from '../assessment';
+import { analyzeRiasec } from '../assessment';
+import { ResultRepository } from '../result';
 import { mapAttemptToHistoryItem } from './test-session.mapper';
 import { AnalyzeDataDto, HistoryItemDto } from './dto/history-item.dto';
 import { AttemptWithResultDto } from './dto/attempt-with-result.dto';

@@ -2,7 +2,7 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import { Prisma, Question } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { CreateQuestionDto } from './dto/create-question.dto';
-import { recordAdminAudit } from '../../core/database/admin-audit';
+import { recordAdminAudit } from '../audit';
 const DIMENSION_VI_MAP: Record<string, string> = {
   PERSONA: 'TÔI LÀ NGƯỜI',
   ABILITY: 'TÔI CÓ THỂ',

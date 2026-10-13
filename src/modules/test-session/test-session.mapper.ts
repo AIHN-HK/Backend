@@ -1,4 +1,4 @@
-import { AnalyzeMeta } from 'src/core/constants/riasec.type';
+import { AnalyzeMeta } from '../assessment';
 import { AnalyzeDataDto, HistoryItemDto } from './dto/history-item.dto';
 import { AttemptWithResultDto } from './dto/attempt-with-result.dto';
 

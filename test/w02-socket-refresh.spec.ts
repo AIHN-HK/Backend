@@ -8,7 +8,7 @@ describe('socket access-token renewal', () => {
     const other = jwt.sign({ userId: 2 });
     const gateway: any = new ChatGateway(
       {} as any,
-      { user: { findUnique: async () => ({ id: 1 }) } } as any,
+      { findUser: async () => ({ id: 1 }) } as any,
       jwt,
       {} as any,
       {} as any,

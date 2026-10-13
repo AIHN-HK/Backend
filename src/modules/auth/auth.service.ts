@@ -7,12 +7,12 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 
 import { AuthRepository } from './auth.repository';
-import { UsersRepository } from '../users/users.repository';
+import { UsersRepository } from '../users';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { HashingService } from 'src/core/services/hash.service';
 import { TokenService } from 'src/core/services/token.service';
-import { OtpService } from '../otp/otp.service';
+import { OtpService } from '../otp';
 import { OtpType } from 'src/core/types/otp.type';
 import { ResetPasswordDto } from './dto/reset_password.dto';
 import { MailService } from 'src/core/services/mail_service';

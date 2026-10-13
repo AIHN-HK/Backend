@@ -1,4 +1,6 @@
 import { ChatService } from './chat.service';
+import { ChatRepository } from './chat.repository';
+import { ChatContextBuilder } from './chat-context.builder';
 
 describe('chat persistence and checkpoint', () => {
   function setup(
@@ -60,12 +62,21 @@ describe('chat persistence and checkpoint', () => {
         return outcome;
       }),
     };
-    const service = new ChatService(prisma, ai, {
-      getResultRanking: async () => ({ attemptId: 2 }),
-    } as any);
+    const repository = new ChatRepository(prisma);
+    const service = new ChatService(
+      repository,
+      ai,
+      new ChatContextBuilder(repository, {
+        getResultRanking: async () => ({ attemptId: 2 }),
+      } as any),
+    );
     const end = jest.fn();
     const run = () =>
-      service.handleUserMessageStream(9, 'new', null, null, () => {}, end, {
+      service.handleUserMessageStream({
+        sessionId: 9,
+        content: 'new',
+        onToken: () => {},
+        onEnd: end,
         userId: 1,
         turnId: 'a',
       });
@@ -105,15 +116,14 @@ describe('chat persistence and checkpoint', () => {
   it('checks the queued owner before writing or contacting AI', async () => {
     const fixture = setup();
     await expect(
-      fixture.service.handleUserMessageStream(
-        9,
-        'private',
-        null,
-        null,
-        () => {},
-        () => {},
-        { userId: 8 },
-      ),
+      fixture.service.handleUserMessageStream({
+        sessionId: 9,
+        content: 'private',
+        userId: 8,
+        turnId: 'a',
+        onToken: () => {},
+        onEnd: () => {},
+      }),
     ).rejects.toMatchObject({ status: 403 });
     expect(fixture.rows()).toHaveLength(1);
     expect(fixture.ai.streamAsk).not.toHaveBeenCalled();

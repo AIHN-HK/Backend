@@ -12,7 +12,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { RiasecType } from '../../core/constants/riasec.type';
+import { RiasecType } from '../assessment';
 
 export class AdminPageDto {
   @Type(() => Number)

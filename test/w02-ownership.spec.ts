@@ -1,4 +1,5 @@
 import { ChatService } from '../src/modules/chat/chat.service';
+import { ChatRepository } from '../src/modules/chat/chat.repository';
 import { ChatGateway } from '../src/modules/chat/chat.gateway';
 import { JwtService } from '@nestjs/jwt';
 import { LoggingMiddleware } from '../src/core/middleware/logging.middleware';
@@ -7,10 +8,10 @@ import { EventEmitter } from 'events';
 describe('chat ownership', () => {
   it('another user cannot read session messages', async () => {
     const s = new ChatService(
-      {
+      new ChatRepository({
         chatSession: { findUnique: async () => ({ userId: 2 }) },
         chatMessage: { findMany: async () => [{ content: 'private' }] },
-      } as any,
+      } as any),
       {} as any,
       {} as any,
     );
@@ -22,7 +23,9 @@ describe('chat ownership', () => {
     '%s cannot join, write, queue, or stop another session',
     async (method) => {
       const s = new ChatService(
-        { chatSession: { findUnique: async () => ({ userId: 2 }) } } as any,
+        new ChatRepository({
+          chatSession: { findUnique: async () => ({ userId: 2 }) },
+        } as any),
         {
           stopGeneration: () => {
             throw new Error('stopped without authorization');
@@ -33,7 +36,7 @@ describe('chat ownership', () => {
       const jwt = new JwtService({ secret: 'w02-socket-only' });
       const g = new ChatGateway(
         s,
-        { user: { findUnique: async () => ({ id: 1 }) } } as any,
+        { findUser: async () => ({ id: 1 }) } as any,
         jwt,
         {
           add: async () => {

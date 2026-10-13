@@ -12,5 +12,6 @@ README.md
 .vscode
 .idea
 coverage
+test-artifacts
 .nyc_output
 *.log

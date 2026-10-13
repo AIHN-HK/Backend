@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/core/database/prisma.service';
 import { CreateResultDto, CreateSnapshotDto } from './dto/create_result.dto';
 import { Prisma } from '@prisma/client';
-import { RiasecCode } from 'src/core/constants/riasec.type';
+import { RiasecCode } from '../assessment';
 type RiasecScore = Record<RiasecCode, number>;
 @Injectable()
 export class ResultRepository {
@@ -45,7 +45,9 @@ export class ResultRepository {
     return this.prisma.snapShot.create({
       data: {
         attemptId: data.attemptId,
-        snapshot: JSON.parse(JSON.stringify(data.snapshot)) as Prisma.JsonValue,
+        snapshot: JSON.parse(
+          JSON.stringify(data.snapshot),
+        ) as Prisma.InputJsonValue,
       },
     });
   }

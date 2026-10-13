@@ -1,5 +1,5 @@
 # Base stage with dependencies
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV COREPACK_HOME="/pnpm/corepack"
 ENV PATH="$PNPM_HOME:$PATH"

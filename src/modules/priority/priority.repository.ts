@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/core/database/prisma.service';
 import { UpdatePriorityDto } from './dto/updateDto';
-import { recordAdminAudit } from '../../core/database/admin-audit';
+import { recordAdminAudit } from '../audit';
 
 @Injectable()
 export class PriorityRepository {

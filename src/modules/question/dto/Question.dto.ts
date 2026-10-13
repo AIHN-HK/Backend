@@ -1,7 +1,7 @@
 import { IsEnum, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { RiasecType } from '../../../core/constants/riasec.type';
-import { QuestionDimension } from 'src/core/constants/dimension';
+import { RiasecType } from '../../assessment';
+import { QuestionDimension } from '../../assessment';
 export class QuestionDto {
   @IsString()
   @IsNotEmpty()

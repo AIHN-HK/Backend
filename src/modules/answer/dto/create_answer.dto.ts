@@ -12,7 +12,7 @@ import {
   Validate,
   ValidateNested,
 } from 'class-validator';
-import { UniqueQuestionInAnswer } from 'src/core/decorators/UniqueQuestionInAnswer';
+import { UniqueQuestionInAnswer } from '../validators/unique-question.validator';
 // import { UniqueQuestionInAnswer } from 'src/core/decorators/UniqueQuestionInAnswer';
 
 export class AnswerDto {

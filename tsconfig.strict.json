@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "incremental": false
+  },
+  "include": [
+    "src/modules/assessment/domain/**/*.ts",
+    "src/modules/audit/**/*.ts",
+    "src/modules/chat/chat.contracts.ts",
+    "src/modules/chat/chat.errors.ts",
+    "src/modules/chat/chat.repository.ts",
+    "src/modules/chat/chat-context.builder.ts",
+    "src/modules/chat/chat.service.ts",
+    "src/modules/chat/chat.processor.ts",
+    "src/modules/chat/chat.gateway.ts",
+    "src/modules/chat/ai.service.ts",
+    "src/modules/admin/**/*.ts"
+  ],
+  "exclude": ["**/*.spec.ts", "node_modules", "dist"]
+}

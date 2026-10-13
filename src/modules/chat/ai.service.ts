@@ -2,27 +2,12 @@ import { Inject, Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import WebSocket = require('ws');
 
-export type AiStreamOutcome = 'completed' | 'cancelled';
-export class AiStreamError extends Error {
-  constructor(
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+import { AiStreamError } from './chat.errors';
+import { AiStreamInput, AiStreamOutcome, isRecord } from './chat.contracts';
+export { AiStreamError } from './chat.errors';
+export type { AiStreamInput, AiStreamOutcome } from './chat.contracts';
 export const AI_SOCKET_FACTORY = 'AI_SOCKET_FACTORY';
 export type AiSocketFactory = (url: string) => WebSocket;
-export interface AiStreamInput {
-  sessionId: number;
-  turnId: string;
-  message: string;
-  profile_json: unknown;
-  test_json: unknown;
-  history: unknown[];
-  signal?: AbortSignal;
-  onToken: (token: string) => void;
-}
 
 @Injectable()
 export class AiService implements OnModuleDestroy {
@@ -135,10 +120,10 @@ export class AiService implements OnModuleDestroy {
       socket.on('message', (raw) => {
         if (settled) return;
         try {
-          const payload = JSON.parse(raw.toString());
+          const payload: unknown = JSON.parse(raw.toString());
           if (
-            !payload ||
-            typeof payload !== 'object' ||
+            !isRecord(payload) ||
+            typeof payload.type !== 'string' ||
             !['start', 'token', 'end', 'error'].includes(payload.type)
           ) {
             fail('AI_PROTOCOL_ERROR', 'AI returned an invalid frame.');

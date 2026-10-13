@@ -2,6 +2,18 @@
 
 NestJS backend with TypeScript, PostgreSQL, Prisma, and JWT authentication.
 
+Runtime: Node 24 (`.nvmrc`, package engines, Docker and CI) with pnpm from `packageManager`.
+
+## Isolated integration checks
+
+`pnpm run test:e2e` builds and exercises the real app process using a UUID PostgreSQL database and private Redis process. `pnpm run test:backend:live` adds Bull/Socket.IO/local fake AI and transaction fault injection. Both require a local DATABASE_URL with CREATEDB permission and redis-server; they never migrate the application database or call external AI/email. Tests close their own app/Redis/DB resources.
+
+For Docker: `docker build -t aihn-backend:technical-local .` then `pnpm run test:docker:local`. The runner migrates an owned UUID DB, probes production readiness/private HTTP and validates SIGTERM shutdown before removing its UUID container. It uses Linux host networking to reach local PostgreSQL/Redis; it never prunes unrelated resources or pushes the image.
+
+The live runner has a 180s abort deadline, bounded HTTP/migration waits, and attempts each cleanup operation even after an earlier cleanup failure. `AIHN_SMOKE_FAIL_STARTUP=1` is a fixture-only failure injection used to verify cleanup (expected nonzero exit).
+
+`.github/workflows/backend-checks.yml` checks PRs/development branches with pnpm store caching, one Jest worker, PostgreSQL test services, a private redis-server, fake AI and a local Docker image. It has no production secrets, SSH or image push. Deployment remains a separate workflow; adding checks does not configure GitHub branch protection or run a deployment. Optional empty AI_WS_URL/CORS_ORIGINS are treated as unset; production CORS stays closed by default.
+
 ## Quick Start
 
 ```bash
@@ -171,3 +183,12 @@ docker-compose down     # Stop
 - Prisma ORM
 - JWT + Passport
 - Swagger + Scalar
+# Technical module conventions
+
+Cross-module source imports use `src/modules/<module>/index.ts` (relative imports to the same entrypoint also work). Each index exports only its intended public providers/types. Repository exports are intentional use-case interfaces; controllers and DTO implementations stay internal. Tests may use internal seams.
+
+`core` contains shared infrastructure and identity primitives and never imports business modules. `modules/assessment/domain` contains pure scoring/RIASEC code. Audit projections and TransactionClient-based writes belong to `modules/audit`. ChatRepository and AdminRepository own their persistence transactions; cache cleanup follows commit and is best effort. Do not retry an AI turn or split audit/checkpoint writes from their transaction.
+
+`pnpm run check` runs normal typecheck, scoped strict typecheck, the dependency gate, lint, tests and build. `pnpm run check:architecture` resolves aliases/relative imports/re-exports through TypeScript and checks actual emitted JS for runtime cycles; erased/type-only cycles are reported separately. Dynamic computed dependencies fail the gate. It covers non-spec TypeScript source in `src`, with no dependency exceptions. The checker emits to memory.
+
+`pnpm run typecheck:strict` enables noImplicitAny/strictNullChecks for the refactored assessment/audit/admin/chat source and its full imported dependency closure. Other root files and tests retain the baseline typecheck settings; the repository is not globally strict. Explicit any is forbidden by lint in those refactored modules except specs. strictBindCallApply, casing and switch-fallthrough checks apply globally.

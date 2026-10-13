@@ -17,6 +17,7 @@ import { ConfigService } from '@nestjs/config';
 import { ChatTurnService } from '../src/modules/chat/chat-turn.service';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const smokeAbort = new AbortController();
 async function freePort() {
   const server = createServer();
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -27,24 +28,42 @@ async function freePort() {
 async function until(check: () => Promise<boolean>, timeout = 10000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
+    smokeAbort.signal.throwIfAborted();
     if (await check()) return;
     await delay(100);
   }
   throw new Error('Local smoke timed out');
 }
 function socketEvent(socket: Socket, name: string, action: () => void) {
-  return new Promise<any>((resolve, reject) => {
-    const timer = setTimeout(() => {
+  const pending = new Promise<any>((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timer);
       socket.off(name, receive);
+      smokeAbort.signal.removeEventListener('abort', aborted);
+    };
+    const aborted = () => {
+      cleanup();
+      reject(new Error('Local smoke aborted'));
+    };
+    const timer = setTimeout(() => {
+      cleanup();
       reject(new Error('Socket event timed out: ' + name));
     }, 10000);
     const receive = (payload: unknown) => {
-      clearTimeout(timer);
+      cleanup();
       resolve(payload);
     };
     socket.once(name, receive);
+    smokeAbort.signal.addEventListener('abort', aborted, { once: true });
+    if (smokeAbort.signal.aborted) {
+      aborted();
+      return;
+    }
     action();
   });
+  // A sibling event can reject before its caller reaches await during failure.
+  pending.catch(() => {});
+  return pending;
 }
 async function stop(child?: ChildProcess) {
   if (!child || child.exitCode !== null || child.signalCode !== null) return;
@@ -64,6 +83,7 @@ async function stop(child?: ChildProcess) {
 
 async function main() {
   const sourceUrl = new URL(process.env.DATABASE_URL!);
+  sourceUrl.searchParams.set('connect_timeout', '5');
   assert.ok(
     ['localhost', '127.0.0.1', '::1'].includes(sourceUrl.hostname),
     'Local PostgreSQL required',
@@ -89,9 +109,17 @@ async function main() {
   let stalledQueue: Queue.Queue;
   let stalledWorker: ChildProcess;
   const aiInputs: any[] = [];
+  const abort = () => smokeAbort.abort(new Error('Local smoke interrupted'));
+  process.once('SIGTERM', abort);
+  process.once('SIGINT', abort);
+  const totalTimer = setTimeout(abort, 180000);
+  let mainFailure: unknown;
   try {
     await master.$executeRawUnsafe(`CREATE DATABASE "${databaseName}"`);
     databaseCreated = true;
+    await master.$executeRawUnsafe(
+      `ALTER DATABASE "${databaseName}" SET statement_timeout TO '15s'`,
+    );
     const migration = spawnSync(
       process.execPath,
       ['node_modules/prisma/build/index.js', 'migrate', 'deploy'],
@@ -99,6 +127,7 @@ async function main() {
         cwd: process.cwd(),
         env: { ...process.env, DATABASE_URL: fixtureUrl.toString() },
         encoding: 'utf8',
+        timeout: 60000,
       },
     );
     assert.equal(migration.status, 0, 'Isolated migration deployment failed');
@@ -139,6 +168,8 @@ async function main() {
     queue = new Queue('ai-chat-queue', {
       redis: { host: '127.0.0.1', port: redisPort, password: redisPassword },
     });
+    if (process.env.AIHN_SMOKE_FAIL_STARTUP === '1')
+      throw new Error('Fixture startup failure injected');
     const turns = new ChatTurnService(
       redis,
       new ConfigService({ CHAT_TURN_LEASE_MS: 3000 }),
@@ -257,7 +288,16 @@ async function main() {
     app.stderr.pipe(log);
     await until(async () => {
       try {
-        return (await fetch(origin + '/api/v1/health/ready')).status === 200;
+        return (
+          (
+            await fetch(origin + '/api/v1/health/ready', {
+              signal: AbortSignal.any([
+                smokeAbort.signal,
+                AbortSignal.timeout(1000),
+              ]),
+            })
+          ).status === 200
+        );
       } catch {
         return false;
       }
@@ -284,6 +324,7 @@ async function main() {
       token = tokens[0],
     ) => {
       const response = await fetch(origin + '/api/v1' + path, {
+        signal: AbortSignal.any([smokeAbort.signal, AbortSignal.timeout(5000)]),
         ...options,
         headers: {
           'Content-Type': 'application/json',
@@ -537,6 +578,72 @@ async function main() {
     assert.equal(topAudit.actorId, admin.id);
     assert.equal((topAudit.before as any).title, 'Before');
     assert.equal((topAudit.after as any).title, 'After');
+    for (const entity of ['Priority', 'TopCode']) {
+      const beforeRows =
+        entity === 'Priority'
+          ? await prisma.priority.findMany({ orderBy: { id: 'asc' } })
+          : await prisma.topCode.findMany({ orderBy: { id: 'asc' } });
+      const beforeAudit = await prisma.adminAuditLog.count();
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "AdminAuditLog" ADD CONSTRAINT "fixture_entity_audit_failure" CHECK (entity <> '${entity}') NOT VALID`,
+      );
+      const response = await request(
+        entity === 'Priority' ? '/admin/priorities' : '/topcode',
+        {
+          method: 'PUT',
+          body: JSON.stringify(
+            entity === 'Priority'
+              ? { priorities }
+              : { ...topcode, title: 'Must roll back' },
+          ),
+        },
+        tokens[1],
+      );
+      assert.equal(response.status, 500);
+      assert.deepEqual(
+        entity === 'Priority'
+          ? await prisma.priority.findMany({ orderBy: { id: 'asc' } })
+          : await prisma.topCode.findMany({ orderBy: { id: 'asc' } }),
+        beforeRows,
+      );
+      assert.equal(await prisma.adminAuditLog.count(), beforeAudit);
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "AdminAuditLog" DROP CONSTRAINT "fixture_entity_audit_failure"',
+      );
+    }
+    // The legacy single-priority path must retain audit atomicity too.
+    const existingPriority = await prisma.priority.findFirstOrThrow();
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "AdminAuditLog" ADD CONSTRAINT "fixture_single_audit_failure" CHECK (entity <> 'Priority') NOT VALID`,
+    );
+    assert.equal(
+      (
+        await request(
+          '/priority',
+          {
+            method: 'PUT',
+            body: JSON.stringify({
+              id: existingPriority.id,
+              priority: existingPriority.priority,
+            }),
+          },
+          tokens[1],
+        )
+      ).status,
+      500,
+    );
+    assert.deepEqual(
+      await prisma.priority.findUniqueOrThrow({
+        where: { id: existingPriority.id },
+      }),
+      existingPriority,
+    );
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "AdminAuditLog" DROP CONSTRAINT "fixture_single_audit_failure"',
+    );
+    console.log(
+      'PASS real PostgreSQL Priority/TopCode audit failure: mutation and audit roll back together.',
+    );
     console.log(
       'PASS admin audit: authenticated actor, public change data, audit failure rolls back mutation.',
     );
@@ -567,6 +674,15 @@ async function main() {
     assert.equal((await busy).code, 'CHAT_BUSY');
     assert.equal((await normalEnd).status, 'completed');
     assert.equal(aiInputs.length, 1);
+    assert.deepEqual(Object.keys(aiInputs[0]).sort(), [
+      'history',
+      'message',
+      'profile_json',
+      'sessionId',
+      'test_json',
+    ]);
+    assert.equal(aiInputs[0].profile_json.basic_info.full_name, owner.fullname);
+    assert.equal(aiInputs[0].test_json.attemptId, connected.attemptId);
     assert.equal(
       await prisma.chatMessage.count({
         where: { sessionId, role: 'assistant' },
@@ -647,31 +763,111 @@ async function main() {
       'PASS real Socket.IO/Bull/authenticated Redis/local fake AI: busy session, completed/failed/cancelled turns, queued cancellation, lease ownership, checkpoint recovery, no automatic replay.',
     );
     assert.ok(queued.turnId);
+    // Real PostgreSQL rejects either write inside the final transaction.
+    // User messages remain pending; assistant insert and checkpoint must roll back.
+    for (const constraint of ["role <> 'assistant'", 'checkpoint = 0']) {
+      const beforeAssistant = await prisma.chatMessage.count({
+        where: { sessionId, role: 'assistant' },
+      });
+      const pendingBefore = await prisma.chatMessage.findMany({
+        where: { sessionId, checkpoint: 0 },
+        select: { id: true },
+      });
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "ChatMessage" ADD CONSTRAINT "fixture_chat_failure" CHECK (${constraint}) NOT VALID`,
+      );
+      const end = socketEvent(socket, 'answer_end', () => {});
+      const failed = await socketEvent(socket, 'queue_joined', () =>
+        socket.emit('ask', { sessionId, content: 'PERSIST_FAILURE' }),
+      );
+      assert.equal((await end).status, 'failed');
+      await until(
+        async () =>
+          (await (await queue.getJob(failed.turnId)).getState()) === 'failed',
+      );
+      assert.equal(
+        await prisma.chatMessage.count({
+          where: { sessionId, role: 'assistant' },
+        }),
+        beforeAssistant,
+      );
+      assert.equal(
+        await prisma.chatMessage.count({
+          where: {
+            id: { in: pendingBefore.map((row) => row.id) },
+            checkpoint: 1,
+          },
+        }),
+        0,
+      );
+      assert.equal(
+        (
+          await prisma.chatMessage.findFirstOrThrow({
+            where: { sessionId, content: 'PERSIST_FAILURE' },
+            orderBy: { id: 'desc' },
+          })
+        ).checkpoint,
+        0,
+      );
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "ChatMessage" DROP CONSTRAINT "fixture_chat_failure"',
+      );
+    }
+    console.log(
+      'PASS real PostgreSQL assistant/checkpoint fault injection: no partial assistant or acknowledgement.',
+    );
     await redis.call('CLIENT', 'PAUSE', '3000', 'ALL');
     assert.equal((await request('/health/ready')).status, 503);
     await until(async () => (await request('/health/ready')).status === 200);
     console.log('PASS readiness dependency failure/recovery.');
+  } catch (error) {
+    mainFailure = error;
+    throw error;
   } finally {
-    socket?.disconnect();
-    await stop(app);
+    clearTimeout(totalTimer);
+    process.removeListener('SIGTERM', abort);
+    process.removeListener('SIGINT', abort);
+    const errors: unknown[] = [];
+    const cleanup = async (action: () => Promise<unknown> | unknown) => {
+      try {
+        await action();
+      } catch (error) {
+        errors.push(error);
+      }
+    };
+    await cleanup(() => socket?.disconnect());
+    await cleanup(() => stop(app));
     if (ai) {
       for (const connection of ai.clients) connection.terminate();
-      await new Promise<void>((resolve) => ai.close(() => resolve()));
+      await cleanup(
+        () => new Promise<void>((resolve) => ai.close(() => resolve())),
+      );
     }
-    await queue?.close();
-    await stop(stalledWorker);
-    await stalledQueue?.close();
-    redis?.disconnect();
-    await stop(redisProcess);
-    await prisma.$disconnect();
+    await cleanup(() => queue?.close());
+    await cleanup(() => stop(stalledWorker));
+    await cleanup(() => stalledQueue?.close());
+    await cleanup(() => redis?.disconnect());
+    await cleanup(() => stop(redisProcess));
+    await cleanup(() => prisma.$disconnect());
     if (databaseCreated)
-      await master.$executeRawUnsafe(`DROP DATABASE "${databaseName}"`);
-    await master.$disconnect();
+      await cleanup(() =>
+        master.$executeRawUnsafe(
+          `DROP DATABASE "${databaseName}" WITH (FORCE)`,
+        ),
+      );
+    await cleanup(() => master.$disconnect());
     log.end();
-    console.log(
-      'Owned local test database removed and processes stopped. Logs:',
-      directory,
-    );
+    if (errors.length) {
+      console.error('Fixture cleanup had failures', {
+        count: errors.length,
+        directory,
+      });
+      if (!mainFailure) throw new Error('Fixture cleanup failed');
+    } else
+      console.log(
+        'Owned local test database removed and processes stopped. Logs:',
+        directory,
+      );
   }
 }
 

@@ -3,7 +3,7 @@ import { validate } from 'class-validator';
 import { AnswerService } from './answer.service';
 import { AnswerRepository } from './answer.repository';
 import { SubmitAnswerDtoV2 } from './dto/create_answer.dto';
-import { ScoreCalculatorService } from '../../core/services/score-calculator.services';
+import { ScoreCalculatorService } from '../assessment/domain/score-calculator.service';
 
 describe('binary submission contract', () => {
   const priorities = ['R', 'I', 'A', 'S', 'E', 'C'].map((type, index) => ({

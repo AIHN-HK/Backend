@@ -16,6 +16,18 @@ module.exports = {
     jest: true,
   },
   ignorePatterns: ['.eslintrc.js'],
+  overrides: [
+    {
+      files: [
+        'src/modules/assessment/**/*.ts',
+        'src/modules/audit/**/*.ts',
+        'src/modules/chat/**/*.ts',
+        'src/modules/admin/**/*.ts',
+      ],
+      excludedFiles: ['**/*.spec.ts'],
+      rules: { '@typescript-eslint/no-explicit-any': 'error' },
+    },
+  ],
   rules: {
     '@typescript-eslint/interface-name-prefix': 'off',
     '@typescript-eslint/explicit-function-return-type': 'off',

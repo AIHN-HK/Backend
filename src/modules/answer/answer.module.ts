@@ -3,11 +3,11 @@ import { AnswerController } from './answer.controller';
 import { AnswerService } from './answer.service';
 import { AnswerRepository } from './answer.repository';
 
-import { QuestionModule } from '../question/question.module';
-import { AttemptModule } from '../attempt/attempt.module';
-import { ResultModule } from '../result/result.module';
-import { ScoreCalculatorService } from 'src/core/services/score-calculator.services';
-import { PriorityModule } from '../priority/priority.module';
+import { QuestionModule } from '../question';
+import { AttemptModule } from '../attempt';
+import { ResultModule } from '../result';
+import { ScoreCalculatorService } from '../assessment';
+import { PriorityModule } from '../priority';
 import { AnswerSubmitLockService } from './answer-submit-lock.service';
 
 @Module({

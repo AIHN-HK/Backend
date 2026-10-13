@@ -1,5 +1,7 @@
 import { UsersService } from '../src/modules/users/users.service';
 import { ChatService } from '../src/modules/chat/chat.service';
+import { ChatRepository } from '../src/modules/chat/chat.repository';
+import { ChatContextBuilder } from '../src/modules/chat/chat-context.builder';
 describe('profile and AI context', () => {
   it('profile commit invalidates legacy context without reintroducing profile cache', async () => {
     const deleted: string[] = [];
@@ -50,29 +52,31 @@ describe('profile and AI context', () => {
       },
     };
     const s = new ChatService(
-      database,
+      new ChatRepository(database),
       ai as any,
-      { getResultRanking: async (id: number) => ({ attemptId: id }) } as any,
+      new ChatContextBuilder(new ChatRepository(database), {
+        getResultRanking: async (id: number) => ({ attemptId: id }),
+      } as any),
     );
-    await s.handleUserMessageStream(
-      10,
-      'first',
-      null,
-      null,
-      () => {},
-      () => {},
-    );
+    await s.handleUserMessageStream({
+      sessionId: 10,
+      userId: 1,
+      turnId: 'a',
+      content: 'first',
+      onToken: () => {},
+      onEnd: () => {},
+    });
     expect(sent.profile_json.basic_info.full_name).toBe('Before');
     expect(sent.test_json.attemptId).toBe(9);
     fullname = 'After';
-    await s.handleUserMessageStream(
-      10,
-      'second',
-      null,
-      null,
-      () => {},
-      () => {},
-    );
+    await s.handleUserMessageStream({
+      sessionId: 10,
+      userId: 1,
+      turnId: 'b',
+      content: 'second',
+      onToken: () => {},
+      onEnd: () => {},
+    });
     expect(sent.profile_json.basic_info.full_name).toBe('After');
   });
 });

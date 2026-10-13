@@ -30,12 +30,13 @@ describe('chat turn coordination at the gateway', () => {
       getJob: jest.fn(async () => null),
     };
     const chat: any = {
+      saveUserMessage: jest.fn(),
       assertSessionOwner: async () => ({}),
       stopGeneration: jest.fn(async () => {}),
     };
     const gateway = new ChatGateway(
       chat,
-      { user: { findUnique: async () => ({ id: 1 }) } } as any,
+      { findUser: async () => ({ id: 1 }) } as any,
       { verify: () => ({ userId: 1 }) } as any,
       queue,
       turns,
@@ -62,6 +63,52 @@ describe('chat turn coordination at the gateway', () => {
       'error',
       expect.objectContaining({ code: 'CHAT_BUSY' }),
     );
+  });
+  it.each([
+    null,
+    [],
+    {},
+    { sessionId: '9' },
+    { sessionId: -1 },
+    { sessionId: 9, content: false },
+    { sessionId: 9, content: ' ' },
+  ])('rejects malformed payload %p without side effects', async (payload) => {
+    const fixture = setup();
+    await fixture.gateway.handleAsk(payload, fixture.socket);
+    await fixture.gateway.handleMessage(payload, fixture.socket);
+    expect(fixture.turns.reserve).not.toHaveBeenCalled();
+    expect(fixture.queue.add).not.toHaveBeenCalled();
+    expect(fixture.chat.saveUserMessage).not.toHaveBeenCalled();
+    expect(fixture.socket.emit).toHaveBeenCalled();
+  });
+  it.each([null, [], {}])(
+    'rejects malformed stop/auth payload %p',
+    async (payload) => {
+      const fixture = setup();
+      await fixture.gateway.handleStop(payload, fixture.socket);
+      await fixture.gateway.handleRefreshAuth(payload, fixture.socket);
+      expect(fixture.turns.cancel).not.toHaveBeenCalled();
+      expect(fixture.chat.stopGeneration).not.toHaveBeenCalled();
+      expect(fixture.socket.emit).toHaveBeenCalled();
+    },
+  );
+  it('queues only server-owned identity and message fields', async () => {
+    const fixture = setup();
+    await fixture.gateway.handleAsk(
+      {
+        sessionId: 9,
+        content: ' message ',
+        userId: 999,
+        profile_json: { injected: true },
+      },
+      fixture.socket,
+    );
+    expect(fixture.queue.add.mock.calls[0][1]).toEqual({
+      sessionId: 9,
+      content: ' message ',
+      userId: 1,
+      turnId: 'a',
+    });
   });
   it('releases reservation after enqueue failure and never reports queue success', async () => {
     const fixture = setup();

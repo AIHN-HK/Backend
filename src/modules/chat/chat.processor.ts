@@ -4,14 +4,8 @@ import { ChatService } from './chat.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Logger, OnModuleDestroy } from '@nestjs/common';
 import { ChatTurnService } from './chat-turn.service';
-import { AiStreamError } from './ai.service';
-
-export interface ChatJobData {
-  sessionId: number;
-  turnId: string;
-  userId: number;
-  content: string;
-}
+import { AiStreamError, chatFailure } from './chat.errors';
+import { ChatJobData, ChatEndEvent, isChatJob } from './chat.contracts';
 
 @Processor('ai-chat-queue')
 export class ChatProcessor implements OnModuleDestroy {
@@ -25,6 +19,7 @@ export class ChatProcessor implements OnModuleDestroy {
 
   @Process({ name: 'process-ask', concurrency: 10 })
   async handleAskJob(job: Job<ChatJobData>) {
+    if (!isChatJob(job.data)) throw new Error('INVALID_CHAT_JOB');
     const { sessionId, content, turnId, userId } = job.data;
     const controller = new AbortController();
     this.active.add(controller);
@@ -57,12 +52,13 @@ export class ChatProcessor implements OnModuleDestroy {
       if (!(await this.turns.isCurrent(sessionId, turnId))) {
         status = 'cancelled';
       } else {
-        status = await this.chatService.handleUserMessageStream(
+        status = await this.chatService.handleUserMessageStream({
           sessionId,
           content,
-          null,
-          null,
-          (token) => {
+          turnId,
+          userId,
+          signal: controller.signal,
+          onToken: (token) => {
             if (!controller.signal.aborted)
               this.eventEmitter.emit('chat.token', {
                 sessionId,
@@ -70,9 +66,8 @@ export class ChatProcessor implements OnModuleDestroy {
                 token,
               });
           },
-          () => {},
-          { turnId, userId, signal: controller.signal },
-        );
+          onEnd: () => {},
+        });
         if (controller.signal.reason instanceof AiStreamError)
           throw controller.signal.reason;
       }
@@ -84,8 +79,7 @@ export class ChatProcessor implements OnModuleDestroy {
           event: 'chat.turn.failed',
           sessionId,
           turnId,
-          code:
-            error instanceof AiStreamError ? error.code : 'CHAT_TURN_FAILED',
+          code: chatFailure(error).code,
         }),
       );
     } finally {
@@ -94,26 +88,13 @@ export class ChatProcessor implements OnModuleDestroy {
       await this.turns.release(sessionId, turnId).catch(() => {
         this.logger.warn('Turn release failed; lease expiry will recover it.');
       });
-      this.eventEmitter.emit('chat.end', {
-        sessionId,
-        turnId,
-        status,
-        ...(status === 'failed'
-          ? {
-              code:
-                failure instanceof AiStreamError
-                  ? failure.code
-                  : 'CHAT_TURN_FAILED',
-              message:
-                'Không thể hoàn tất lượt chat. Hãy kiểm tra lịch sử trước khi gửi lại.',
-            }
-          : {}),
-      });
+      const end: ChatEndEvent =
+        status === 'failed'
+          ? { sessionId, turnId, status, ...chatFailure(failure) }
+          : { sessionId, turnId, status };
+      this.eventEmitter.emit('chat.end', end);
     }
-    if (failure)
-      throw new Error(
-        failure instanceof AiStreamError ? failure.code : 'CHAT_TURN_FAILED',
-      );
+    if (status === 'failed') throw new Error(chatFailure(failure).code);
   }
 
   onModuleDestroy() {

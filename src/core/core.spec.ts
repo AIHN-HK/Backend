@@ -6,7 +6,7 @@ import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { LoggingMiddleware } from './middleware/logging.middleware';
 import { RedisService } from './redis/redis.service';
 import { redisOptions } from './config/redis.options';
-import { recordAdminAudit } from './database/admin-audit';
+import { recordAdminAudit } from '../modules/audit/admin-audit';
 import { allowedOrigins } from './config/cors.options';
 
 describe('request completion logs', () => {

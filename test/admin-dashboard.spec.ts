@@ -6,6 +6,7 @@ import { Reflector } from '@nestjs/core';
 import request = require('supertest');
 import { AdminController } from '../src/modules/admin/admin.controller';
 import { AdminService } from '../src/modules/admin/admin.service';
+import { AdminRepository } from '../src/modules/admin/admin.repository';
 import { PrismaService } from '../src/core/database/prisma.service';
 import { RedisService } from '../src/core/redis/redis.service';
 import { JwtStrategy } from '../src/modules/auth/strategies/jwt.strategy';
@@ -74,6 +75,7 @@ describe('admin dashboard contract', () => {
       controllers: [AdminController],
       providers: [
         AdminService,
+        AdminRepository,
         JwtStrategy,
         { provide: ConfigService, useValue: { get: () => 'admin-test' } },
         {

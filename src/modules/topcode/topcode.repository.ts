@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UpdateTopcodeBodyDto } from './dto/update.dto';
 import { PrismaService } from 'src/core/database/prisma.service';
-import { recordAdminAudit } from '../../core/database/admin-audit';
+import { recordAdminAudit } from '../audit';
 import { Prisma } from '@prisma/client';
 
 @Injectable()

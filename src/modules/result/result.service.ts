@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { AttemptRepository } from '../attempt/attempt.repository';
-import { ScoreCalculatorService } from 'src/core/services/score-calculator.services';
+import type { Result } from '@prisma/client';
+import { AttemptRepository } from '../attempt';
+import { ScoreCalculatorService } from '../assessment';
 // import { RiasecCode } from 'src/core/constants/riasec.type';
 import { ResultRepository } from './result.repository';
-import { rankScores, ScoreItem } from 'src/core/services/rank_score';
-import { RiasecScore } from 'src/core/constants/riasec.type';
+import { rankScores, ScoreItem } from '../assessment';
+import { RiasecScore } from '../assessment';
 import { RedisService } from 'src/core/redis/redis.service';
 @Injectable()
 export class ResultService {
@@ -80,6 +81,7 @@ export class ResultService {
     if (!analyzeResult) {
       throw new Error(`Analyze results not found for the top code`);
     }
+    if (!result.attempt.finishAt) throw new Error('Attempt unfinished');
     return {
       analyzeResult,
       finishAt: result.attempt.finishAt.toLocaleDateString('vi-VN'),
@@ -162,7 +164,12 @@ export class ResultService {
     return result;
   }
 
-  private buildScores(result: any): ScoreItem[] {
+  private buildScores(
+    result: Pick<
+      Result,
+      'scoreR' | 'scoreI' | 'scoreA' | 'scoreS' | 'scoreE' | 'scoreC'
+    >,
+  ): ScoreItem[] {
     return [
       { type: 'R', score: result.scoreR },
       { type: 'I', score: result.scoreI },

@@ -9,16 +9,22 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
-import { ClientSendMessage } from './chat.types';
 
 import { ConflictException, Logger } from '@nestjs/common';
 import { ChatTurnService } from './chat-turn.service';
-import { PrismaService } from 'src/core/database/prisma.service';
+import { ChatRepository } from './chat.repository';
 import { JwtService } from '@nestjs/jwt';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { OnEvent } from '@nestjs/event-emitter';
 import { allowedOrigins } from '../../core/config/cors.options';
+import {
+  ChatEndEvent,
+  ChatTokenEvent,
+  hasSessionId,
+  isChatMessage,
+  isRecord,
+} from './chat.contracts';
 @WebSocketGateway({
   cors: {
     origin: allowedOrigins(
@@ -33,7 +39,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   server: Server;
   constructor(
     private chatService: ChatService,
-    private prisma: PrismaService,
+    private readonly repository: ChatRepository,
     private jwtService: JwtService,
     @InjectQueue('ai-chat-queue') private aiChatQueue: Queue,
     private readonly turns: ChatTurnService,
@@ -50,17 +56,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       const payload = this.jwtService.verify(token);
-      const owner = await this.prisma.user.findUnique({
-        where: { id: payload.userId },
-      });
+      const owner = await this.repository.findUser(payload.userId);
       if (!owner) throw new Error('User not found');
       client.data.user = payload;
       const userId = payload.userId;
 
-      const attempt = await this.prisma.attempt.findFirst({
-        where: { userId, finishAt: { not: null }, result: { isNot: null } },
-        orderBy: { createdAt: 'desc' },
-      });
+      const attempt = await this.repository.latestCompletedAttempt(userId);
 
       if (!attempt) {
         this.logger.warn(
@@ -85,7 +86,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         title: session.title,
       });
     } catch (error) {
-      this.logger.error(`Connection error: ${error.message}`, error.stack);
+      this.logger.error('Chat connection rejected');
       client.emit('error', { message: 'Authentication failed' });
       client.disconnect();
     }
@@ -157,9 +158,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const payload = this.jwtService.verify(socket.handshake.auth.token);
       if (payload.userId !== socket.data.user?.userId)
         throw new Error('Account changed');
-      const user = await this.prisma.user.findUnique({
-        where: { id: payload.userId },
-      });
+      const user = await this.repository.findUser(payload.userId);
       if (!user) throw new Error('User not found');
       await this.chatService.assertSessionOwner(sessionId, payload.userId);
       return true;
@@ -173,16 +172,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('refresh_auth')
   async handleRefreshAuth(
-    @MessageBody() data: { token: string },
+    @MessageBody() data: unknown,
     @ConnectedSocket() socket: Socket,
   ) {
     try {
+      if (!isRecord(data) || typeof data.token !== 'string' || !data.token)
+        throw new Error('Invalid token');
       const payload = this.jwtService.verify(data.token);
       if (payload.userId !== socket.data.user?.userId)
         throw new Error('Account changed');
-      const user = await this.prisma.user.findUnique({
-        where: { id: payload.userId },
-      });
+      const user = await this.repository.findUser(payload.userId);
       if (!user) throw new Error('User not found');
       socket.handshake.auth.token = data.token;
       socket.emit('auth_refreshed');
@@ -193,10 +192,23 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('send_message')
   async handleMessage(
-    @MessageBody() payload: ClientSendMessage,
+    @MessageBody() payload: unknown,
     @ConnectedSocket() socket: Socket,
   ) {
+    if (!hasSessionId(payload)) {
+      socket.emit('error', {
+        message: 'Session access denied or authentication expired',
+      });
+      return;
+    }
     if (!(await this.authorizeSession(socket, payload.sessionId))) return;
+    if (!isChatMessage(payload)) {
+      socket.emit('error', {
+        code: 'INVALID_CHAT_MESSAGE',
+        message: 'Message must contain 1–8000 characters.',
+      });
+      return;
+    }
     if (payload.sessionId && socket.data.sessionId !== payload.sessionId) {
       if (socket.data.sessionId)
         socket.leave(`session-${socket.data.sessionId}`);
@@ -216,20 +228,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('ask')
   async handleAsk(
     @MessageBody()
-    data: {
-      sessionId: number;
-      content: string;
-      basic_info?: unknown;
-      profile_json?: unknown;
-    },
+    data: unknown,
     @ConnectedSocket() socket: Socket,
   ) {
-    if (!(await this.authorizeSession(socket, data?.sessionId))) return;
-    if (
-      typeof data.content !== 'string' ||
-      !data.content.trim() ||
-      data.content.length > 8000
-    ) {
+    if (!hasSessionId(data)) {
+      socket.emit('error', {
+        message: 'Session access denied or authentication expired',
+      });
+      return;
+    }
+    if (!(await this.authorizeSession(socket, data.sessionId))) return;
+    if (!isChatMessage(data)) {
       socket.emit('error', {
         code: 'INVALID_CHAT_MESSAGE',
         message: 'Message must contain 1–8000 characters.',
@@ -242,7 +251,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       socket.join(`session-${data.sessionId}`);
       socket.data.sessionId = data.sessionId;
     }
-    let turnId: string;
+    let turnId: string | undefined;
     try {
       turnId = await this.turns.reserve(data.sessionId);
       this.generatingMap.set(data.sessionId, turnId);
@@ -285,11 +294,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
   @OnEvent('chat.token')
-  handleChatToken(payload: {
-    sessionId: number;
-    turnId: string;
-    token: string;
-  }) {
+  handleChatToken(payload: ChatTokenEvent) {
     if (this.generatingMap.get(payload.sessionId) !== payload.turnId) return;
     this.server.to(`session-${payload.sessionId}`).emit('answer_token', {
       sessionId: payload.sessionId,
@@ -298,13 +303,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
   @OnEvent('chat.end')
-  handleChatEnd(payload: {
-    sessionId: number;
-    turnId: string;
-    status: string;
-    code?: string;
-    message?: string;
-  }) {
+  handleChatEnd(payload: ChatEndEvent) {
     if (this.generatingMap.get(payload.sessionId) !== payload.turnId) return;
     this.generatingMap.delete(payload.sessionId);
     this.server.to(`session-${payload.sessionId}`).emit('answer_end', payload);
@@ -316,9 +315,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('stop_generation')
   async handleStop(
-    @MessageBody() data: { sessionId: number },
+    @MessageBody() data: unknown,
     @ConnectedSocket() socket: Socket,
   ) {
+    if (!hasSessionId(data)) {
+      socket.emit('error', {
+        message: 'Session access denied or authentication expired',
+      });
+      return;
+    }
     if (!(await this.authorizeSession(socket, data.sessionId))) return;
     try {
       const turnId = await this.turns.cancel(data.sessionId);

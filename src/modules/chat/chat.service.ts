@@ -3,266 +3,87 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { PrismaService } from 'src/core/database/prisma.service';
-import { ClientSendMessage } from './chat.types';
-import { AiService, AiStreamOutcome } from './ai.service';
-import { randomUUID } from 'crypto';
-import { ResultService } from '../result/result.service';
+import { AiService } from './ai.service';
+import {
+  AiStreamOutcome,
+  ChatTurnInput,
+  ChatMessageInput,
+} from './chat.contracts';
+import { ChatRepository } from './chat.repository';
+import { ChatContextBuilder } from './chat-context.builder';
 @Injectable()
 export class ChatService {
   constructor(
-    private prisma: PrismaService,
-    private aiService: AiService,
-    private resultService: ResultService,
+    private readonly repository: ChatRepository,
+    private readonly aiService: AiService,
+    private readonly context: ChatContextBuilder,
   ) {}
-
-  async saveUserMessage(dto: ClientSendMessage) {
-    return await this.prisma.chatMessage.create({
-      data: {
-        sessionId: dto.sessionId,
-        content: dto.content,
-        role: 'user',
-      },
-    });
+  saveUserMessage(input: ChatMessageInput) {
+    return this.repository.saveUserMessage(input);
   }
-  async saveQuestion(sessionId: number, content: string) {
-    return await this.prisma.chatMessage.create({
-      data: {
-        sessionId,
-        role: 'user',
-        content,
-      },
-    });
+  saveQuestion(sessionId: number, content: string) {
+    return this.repository.saveQuestion(sessionId, content);
   }
-  async createSession(socketId: string, userId: number, attemptId: number) {
-    const latestEmpty = await this.prisma.chatSession.findFirst({
-      where: {
-        userId,
-        title: 'Cuộc trò chuyện mới',
-        status: 'ACTIVE',
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (latestEmpty) {
-      const hasMessage = await this.prisma.chatMessage.findFirst({
-        where: { sessionId: latestEmpty.id },
-      });
-
-      if (!hasMessage) {
-        return this.prisma.chatSession.update({
-          where: { id: latestEmpty.id },
-          data: { socketId, attemptId },
-        });
-      }
-    }
-
-    return this.prisma.chatSession.create({
-      data: {
-        socketId,
-        userId,
-        attemptId,
-        title: 'Cuộc trò chuyện mới',
-        status: 'ACTIVE',
-      },
-    });
+  createSession(socketId: string, userId: number, attemptId: number) {
+    return this.repository.createSession(socketId, userId, attemptId);
   }
-  async createSessionChat(userId: number, attemptId: number) {
-    const chatSession = await this.prisma.chatSession.create({
-      data: {
-        status: 'ACTIVE',
-        title: 'Cuộc trò chuyện mới',
-        userId,
-        attemptId,
-        socketId: '',
-      },
-    });
-
-    return { sessionId: chatSession.id };
+  createSessionChat(userId: number, attemptId: number) {
+    return this.repository.createSessionChat(userId, attemptId);
   }
-
-  async closeSession(sessionId: number) {
-    return this.prisma.chatSession.update({
-      where: { id: sessionId },
-      data: {
-        status: 'CLOSED',
-        closedAt: new Date(),
-      },
-    });
+  closeSession(sessionId: number) {
+    return this.repository.closeSession(sessionId);
   }
   async stopGeneration(sessionId: number, turnId?: string) {
     this.aiService.stopGeneration(sessionId, turnId);
   }
   async handleUserMessageStream(
-    sessionId: number,
-    content: string,
-    profile_json: any,
-    test_json: any,
-    onToken: (token: string) => void,
-    onEnd: () => void,
-    options: { turnId?: string; userId?: number; signal?: AbortSignal } = {},
+    input: ChatTurnInput,
   ): Promise<AiStreamOutcome> {
-    const session = await this.prisma.chatSession.findUnique({
-      where: { id: sessionId },
-      include: {
-        attempt: {
-          select: {
-            id: true,
-            userId: true,
-          },
-        },
-      },
-    });
-    if (
-      !session ||
-      (options.userId !== undefined && session.userId !== options.userId)
-    ) {
-      throw new ForbiddenException('Session does not belong to you');
-    }
-    if (options.signal?.aborted) return 'cancelled';
-
-    // Authoritative reads prevent stale profile/attempt context and late cache fills.
-    const [result, user] = await Promise.all([
-      this.prisma.result.findUnique({
-        where: { attemptId: session.attemptId },
-      }),
-      this.prisma.user.findUnique({ where: { id: session.userId } }),
-    ]);
-    if (!result || !user) throw new Error('Attempt has no result or owner');
-    const test_json_context = await this.resultService.getResultRanking(
-      result.attemptId,
-      session.userId,
-    );
-    const basic_info = {
-      full_name: user.fullname,
-      age: new Date().getFullYear() - user.yob.getFullYear(),
-      address: user.address,
-      status: 'STUDENT',
-    };
-
-    test_json = test_json_context;
-    await this.prisma.chatMessage.create({
-      data: { sessionId, content, role: 'user' },
-    });
-    const history = await this.prisma.chatMessage.findMany({
-      where: {
-        sessionId,
-        checkpoint: 0,
-      },
-      orderBy: { createdAt: 'asc' },
-      take: 201,
-      select: {
-        id: true,
-        role: true,
-        content: true,
-      },
-    });
-    if (
-      history.length > 200 ||
-      history.reduce((size, message) => size + message.content.length, 0) >
-        100000
-    ) {
-      throw new Error(
-        'Pending chat history exceeded its limit; start a new session.',
-      );
-    }
-    profile_json = {
-      form_date: new Date().toISOString().slice(0, 10),
-      basic_info,
-      self_understanding: {
-        hobbies: [],
-        strengths: [],
-        favorite_subjects: [],
-        experience: null,
-      },
-      career_orientation: {
-        has_chosen: false,
-        considering_careers: null,
-        target_schools: [],
-        important_factors: [],
-      },
-      family_info: {
-        father_job: null,
-        mother_job: null,
-        family_expectations: null,
-        has_guidance: false,
-        guidance_content: null,
-      },
-    };
-    await this.prisma.chatSession.updateMany({
-      where: {
-        id: sessionId,
-        title: 'Cuộc trò chuyện mới',
-      },
-      data: {
-        title: content.slice(0, 50),
-      },
-    });
-
+    const { sessionId, content, userId, turnId, signal, onToken, onEnd } =
+      input;
+    const session = await this.assertSessionOwner(sessionId, userId);
+    if (signal?.aborted) return 'cancelled';
+    const context = await this.context.build(session);
+    await this.repository.saveUserMessage({ sessionId, content });
+    const history = await this.context.pendingHistory(sessionId);
+    await this.repository.renameNewSession(sessionId, content);
     let fullAnswer = '';
     const outcome = await this.aiService.streamAsk({
       sessionId,
-      turnId: options.turnId ?? randomUUID(),
-      signal: options.signal,
+      turnId,
+      signal,
       message: content,
-      profile_json,
-      test_json,
+      ...context,
       history,
       onToken: (token) => {
         fullAnswer += token;
         onToken(token);
       },
     });
-    if (outcome === 'cancelled' || options.signal?.aborted) return 'cancelled';
-    await this.prisma.$transaction(async (tx) => {
-      await tx.chatMessage.create({
-        data: { sessionId, role: 'assistant', content: fullAnswer },
-      });
-      await tx.chatMessage.updateMany({
-        where: {
-          sessionId,
-          id: { in: history.map((message) => message.id) },
-          checkpoint: 0,
-        },
-        data: { checkpoint: 1 },
-      });
-    });
+    if (outcome === 'cancelled' || signal?.aborted) return 'cancelled';
+    await this.repository.completeTurn(
+      sessionId,
+      fullAnswer,
+      history.map((message) => message.id),
+    );
     onEnd();
     return 'completed';
   }
-
-  async getSessionsChatByUser(userId: number) {
-    return this.prisma.chatSession.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        createdAt: true,
-      },
-    });
+  getSessionsChatByUser(userId: number) {
+    return this.repository.getSessionsChatByUser(userId);
   }
   async assertSessionOwner(sessionId: number, userId: number) {
     if (!Number.isSafeInteger(userId) || userId <= 0)
       throw new UnauthorizedException();
     if (!Number.isSafeInteger(sessionId) || sessionId <= 0)
       throw new ForbiddenException();
-    const session = await this.prisma.chatSession.findUnique({
-      where: { id: sessionId },
-    });
+    const session = await this.repository.findSession(sessionId);
     if (!session || session.userId !== userId)
       throw new ForbiddenException('Session does not belong to you');
     return session;
   }
-
   async getMessage(sessionId: number, userId: number) {
     await this.assertSessionOwner(sessionId, userId);
-    return this.prisma.chatMessage.findMany({
-      where: {
-        sessionId,
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    return this.repository.getMessage(sessionId);
   }
 }

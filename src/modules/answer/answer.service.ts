@@ -7,11 +7,11 @@ import {
 import { Prisma } from '@prisma/client';
 import { SubmitAnswerDto, SubmitAnswerDtoV2 } from './dto/create_answer.dto';
 import { AnswerRepository } from './answer.repository';
-import { QuestionRepository } from '../question/question.repository';
-import { AttemptRepository } from '../attempt/attempt.repository';
-import { ScoreCalculatorService } from 'src/core/services/score-calculator.services';
-import { RiasecCode } from 'src/core/constants/riasec.type';
-import { PriorityRepository } from '../priority/priority.repository';
+import { QuestionRepository } from '../question';
+import { AttemptRepository } from '../attempt';
+import { ScoreCalculatorService } from '../assessment';
+import { RiasecCode } from '../assessment';
+import { PriorityRepository } from '../priority';
 import { AnswerSubmitLockService } from './answer-submit-lock.service';
 
 @Injectable()

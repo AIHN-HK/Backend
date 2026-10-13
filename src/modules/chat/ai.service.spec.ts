@@ -41,6 +41,15 @@ describe('AI stream lifecycle', () => {
     const pending = service.streamAsk(input);
     const socket = sockets[0];
     socket.emit('open');
+    const wire = JSON.parse(socket.send.mock.calls[0][0]);
+    expect(wire).toEqual({
+      sessionId: input.sessionId,
+      message: input.message,
+      profile_json: input.profile_json,
+      test_json: input.test_json,
+      history: input.history,
+    });
+    expect(wire).not.toHaveProperty('turnId');
     socket.emit('message', Buffer.from('{"type":"token","content":"Hello"}'));
     socket.emit('message', Buffer.from('{"type":"end"}'));
     socket.emit('message', Buffer.from('{"type":"token","content":"late"}'));

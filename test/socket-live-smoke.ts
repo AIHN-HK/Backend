@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { getQueueToken } from '@nestjs/bull';
 import { ChatGateway } from '../src/modules/chat/chat.gateway';
 import { ChatService } from '../src/modules/chat/chat.service';
+import { ChatRepository } from '../src/modules/chat/chat.repository';
 import { PrismaService } from '../src/core/database/prisma.service';
 import { ChatTurnService } from '../src/modules/chat/chat-turn.service';
 const updateSocketAuth = (socket: any, token: string) => {
@@ -73,7 +74,7 @@ async function main() {
       },
     });
     const service = new ChatService(
-      prisma as any,
+      new ChatRepository(prisma as any),
       { stopGeneration: () => {} } as any,
       {} as any,
     );
@@ -89,6 +90,10 @@ async function main() {
         },
         { provide: ChatService, useValue: service },
         { provide: PrismaService, useValue: prisma },
+        {
+          provide: ChatRepository,
+          useValue: new ChatRepository(prisma as any),
+        },
         { provide: JwtService, useValue: jwt },
         {
           provide: getQueueToken('ai-chat-queue'),
