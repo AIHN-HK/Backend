@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/core/database/prisma.service';
 import { AnswerDto, AnswerDtoV2 } from './dto/create_answer.dto';
@@ -9,28 +9,33 @@ export class AnswerRepository {
 
   async submitAnswerTransaction(data: {
     attemptId: number;
+    userId: number;
     answers: Prisma.AnswerCreateManyInput[];
     resultData: Prisma.ResultCreateInput;
     completedAt: Date;
+    snapshot: Prisma.InputJsonValue;
   }) {
     return this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.attempt.updateMany({
+        where: { id: data.attemptId, userId: data.userId, finishAt: null },
+        data: { finishAt: data.completedAt },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictException({
+          code: 'ATTEMPT_COMPLETED',
+          message: 'Attempt already completed or no longer available.',
+        });
+      }
       await tx.answer.createMany({
         data: data.answers,
-        skipDuplicates: true,
       });
 
       await tx.result.create({
         data: data.resultData,
       });
 
-      await tx.attempt.update({
-        where: {
-          id: data.attemptId,
-          finishAt: null,
-        },
-        data: {
-          finishAt: data.completedAt,
-        },
+      await tx.snapShot.create({
+        data: { attemptId: data.attemptId, snapshot: data.snapshot },
       });
     });
   }

@@ -42,3 +42,11 @@ Thumbs.db
 # Project documentation and local tooling
 /docs/
 /.serena/
+
+# Keep repository and coding-agent guidance files versioned
+!**/AGENTS.md
+!**/CLAUDE.md
+!**/CODEX.md
+!**/GEMINI.md
+!**/COPILOT.md
+!**/AIDER.md

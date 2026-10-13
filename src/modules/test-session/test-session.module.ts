@@ -5,8 +5,10 @@ import { QuestionModule } from '../question/question.module';
 import { TopcodeModule } from '../topcode/topcode.module';
 import { AttemptModule } from '../attempt/attempt.module';
 import { ResultModule } from '../result/result.module';
+import { TestSessionController } from './test-session.controller';
 
 @Module({
+  controllers: [TestSessionController],
   providers: [TestSessionService, SessionRepository],
   exports: [TestSessionService],
   imports: [QuestionModule, AttemptModule, TopcodeModule, ResultModule],

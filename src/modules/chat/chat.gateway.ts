@@ -11,15 +11,20 @@ import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 import { ClientSendMessage } from './chat.types';
 
-import { Logger } from '@nestjs/common';
+import { ConflictException, Logger } from '@nestjs/common';
+import { ChatTurnService } from './chat-turn.service';
 import { PrismaService } from 'src/core/database/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { OnEvent } from '@nestjs/event-emitter';
+import { allowedOrigins } from '../../core/config/cors.options';
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: allowedOrigins(
+      process.env.CORS_ORIGINS,
+      process.env.NODE_ENV === 'production',
+    ),
   },
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -31,8 +36,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private prisma: PrismaService,
     private jwtService: JwtService,
     @InjectQueue('ai-chat-queue') private aiChatQueue: Queue,
+    private readonly turns: ChatTurnService,
   ) {}
-  private generatingMap = new Map<number, boolean>();
+  private generatingMap = new Map<number, string>();
   async handleConnection(client: Socket) {
     try {
       const token = client.handshake.auth.token;
@@ -52,7 +58,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const userId = payload.userId;
 
       const attempt = await this.prisma.attempt.findFirst({
-        where: { userId },
+        where: { userId, finishAt: { not: null }, result: { isNot: null } },
         orderBy: { createdAt: 'desc' },
       });
 
@@ -212,69 +218,100 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody()
     data: {
       sessionId: number;
-      basic_info: any;
-      profile_json: any;
       content: string;
+      basic_info?: unknown;
+      profile_json?: unknown;
     },
     @ConnectedSocket() socket: Socket,
   ) {
-    if (!(await this.authorizeSession(socket, data.sessionId))) return;
-    if (data.sessionId && socket.data.sessionId !== data.sessionId) {
+    if (!(await this.authorizeSession(socket, data?.sessionId))) return;
+    if (
+      typeof data.content !== 'string' ||
+      !data.content.trim() ||
+      data.content.length > 8000
+    ) {
+      socket.emit('error', {
+        code: 'INVALID_CHAT_MESSAGE',
+        message: 'Message must contain 1–8000 characters.',
+      });
+      return;
+    }
+    if (socket.data.sessionId !== data.sessionId) {
       if (socket.data.sessionId)
         socket.leave(`session-${socket.data.sessionId}`);
       socket.join(`session-${data.sessionId}`);
       socket.data.sessionId = data.sessionId;
     }
-
-    this.generatingMap.set(data.sessionId, true);
-
-    await this.aiChatQueue.add('process-ask', {
-      sessionId: data.sessionId,
-      basic_info: data.basic_info,
-      profile_json: data.profile_json,
-      content: data.content,
-    });
-
-    this.server.to(`session-${data.sessionId}`).emit('queue_joined', {
-      sessionId: data.sessionId,
-      message: 'Hệ thống đang xử lý yêu cầu, vui lòng chờ...',
-    });
-    // this.chatService.handleUserMessageStream(
-    //   data.sessionId,
-    //   data.content,
-    //   data.basic_info,
-    //   data.profile_json,
-    //   (token) => {
-    //     if (!this.generatingMap.get(data.sessionId)) return;
-    //     this.server.to(`session-${data.sessionId}`).emit('answer_token', {
-    //       sessionId: data.sessionId,
-    //       content: token,
-    //     });
-    //   },
-
-    //   () => {
-    //     this.generatingMap.set(data.sessionId, false);
-
-    //     this.server.to(`session-${data.sessionId}`).emit('answer_end', {
-    //       sessionId: data.sessionId,
-    //     });
-    //   },
-    // );
+    let turnId: string;
+    try {
+      turnId = await this.turns.reserve(data.sessionId);
+      this.generatingMap.set(data.sessionId, turnId);
+      await this.aiChatQueue.add(
+        'process-ask',
+        {
+          sessionId: data.sessionId,
+          turnId,
+          content: data.content,
+          userId: socket.data.user.userId,
+        },
+        {
+          jobId: turnId,
+          attempts: 1,
+          removeOnComplete: 100,
+          removeOnFail: 100,
+        },
+      );
+      this.server.to(`session-${data.sessionId}`).emit('queue_joined', {
+        sessionId: data.sessionId,
+        turnId,
+        message: 'Hệ thống đang xử lý yêu cầu, vui lòng chờ...',
+      });
+    } catch (error) {
+      if (turnId) {
+        await this.turns.release(data.sessionId, turnId).catch(() => undefined);
+        if (this.generatingMap.get(data.sessionId) === turnId)
+          this.generatingMap.delete(data.sessionId);
+      }
+      socket.emit('error', {
+        code:
+          error instanceof ConflictException
+            ? 'CHAT_BUSY'
+            : 'CHAT_QUEUE_UNAVAILABLE',
+        message:
+          error instanceof ConflictException
+            ? 'Một lượt chat đang chờ hoặc đang chạy.'
+            : 'Hàng đợi chat tạm thời không khả dụng.',
+      });
+    }
   }
   @OnEvent('chat.token')
-  handleChatToken(payload: { sessionId: number; token: string }) {
-    if (!this.generatingMap.get(payload.sessionId)) return;
+  handleChatToken(payload: {
+    sessionId: number;
+    turnId: string;
+    token: string;
+  }) {
+    if (this.generatingMap.get(payload.sessionId) !== payload.turnId) return;
     this.server.to(`session-${payload.sessionId}`).emit('answer_token', {
       sessionId: payload.sessionId,
       content: payload.token,
+      turnId: payload.turnId,
     });
   }
   @OnEvent('chat.end')
-  handleChatEnd(payload: { sessionId: number }) {
-    this.generatingMap.set(payload.sessionId, false);
-    this.server.to(`session-${payload.sessionId}`).emit('answer_end', {
-      sessionId: payload.sessionId,
-    });
+  handleChatEnd(payload: {
+    sessionId: number;
+    turnId: string;
+    status: string;
+    code?: string;
+    message?: string;
+  }) {
+    if (this.generatingMap.get(payload.sessionId) !== payload.turnId) return;
+    this.generatingMap.delete(payload.sessionId);
+    this.server.to(`session-${payload.sessionId}`).emit('answer_end', payload);
+    if (payload.status === 'failed')
+      this.server
+        .to(`session-${payload.sessionId}`)
+        .emit('answer_error', payload);
   }
 
   @SubscribeMessage('stop_generation')
@@ -283,10 +320,37 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() socket: Socket,
   ) {
     if (!(await this.authorizeSession(socket, data.sessionId))) return;
-    await this.chatService.stopGeneration(data.sessionId);
-    this.generatingMap.set(data.sessionId, false);
-    this.server.to(`session-${data.sessionId}`).emit('generation_stopped', {
-      sessionId: data.sessionId,
-    });
+    try {
+      const turnId = await this.turns.cancel(data.sessionId);
+      if (!turnId) return;
+      await this.chatService.stopGeneration(data.sessionId, turnId);
+      const job = await this.aiChatQueue.getJob(turnId);
+      if (!job || ['failed', 'completed'].includes(await job.getState())) {
+        await this.turns.release(data.sessionId, turnId);
+      }
+      if (
+        job &&
+        ['waiting', 'delayed', 'paused'].includes(await job.getState())
+      ) {
+        try {
+          await job.remove();
+          await this.turns.release(data.sessionId, turnId);
+        } catch {
+          // A worker may have claimed the job; it will observe cancellation.
+        }
+      }
+      if (this.generatingMap.get(data.sessionId) === turnId)
+        this.generatingMap.delete(data.sessionId);
+      this.server.to(`session-${data.sessionId}`).emit('generation_stopped', {
+        sessionId: data.sessionId,
+        turnId,
+      });
+    } catch {
+      socket.emit('error', {
+        code: 'CHAT_QUEUE_UNAVAILABLE',
+        message:
+          'Không thể xác nhận hủy lượt chat. Hãy kiểm tra lịch sử trước khi gửi lại.',
+      });
+    }
   }
 }

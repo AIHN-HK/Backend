@@ -1,21 +1,41 @@
 import { Injectable } from '@nestjs/common';
 import { UpdateTopcodeBodyDto } from './dto/update.dto';
 import { PrismaService } from 'src/core/database/prisma.service';
+import { recordAdminAudit } from '../../core/database/admin-audit';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class TopcodeRepository {
   constructor(private readonly prismaService: PrismaService) {}
-  async updateTopcode(data: UpdateTopcodeBodyDto) {
-    return this.prismaService.topCode.update({
-      where: { code: data.code },
-      data: {
-        title: data.title,
-        personality: data.personality,
-        strengths: data.strengths,
-        weaknesses: data.weaknesses,
-        careers: data.careers,
+  async updateTopcode(data: UpdateTopcodeBodyDto, actorId?: number) {
+    return this.prismaService.$transaction(
+      async (tx) => {
+        const before = await tx.topCode.findUnique({
+          where: { code: data.code },
+        });
+        const after = await tx.topCode.update({
+          where: { code: data.code },
+          data: {
+            title: data.title,
+            personality: data.personality,
+            strengths: data.strengths,
+            weaknesses: data.weaknesses,
+            careers: data.careers,
+          },
+        });
+        await recordAdminAudit(
+          tx,
+          actorId,
+          'TopCode',
+          'updated',
+          data.code,
+          before,
+          after,
+        );
+        return after;
       },
-    });
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
   async findMany(codes: string[]) {
     return this.prismaService.topCode.findMany({

@@ -3,7 +3,6 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ConfigModule } from './core/config/config.module';
 import { DatabaseModule } from './core/database/database.module';
 import { HttpExceptionFilter } from './core/filters/http-exception.filter';
-import { LoggingInterceptor } from './core/interceptors/logging.interceptor';
 import { ValidationPipe } from './core/pipes/validation.pipe';
 // import { JwtAuthGuard } from './core/guards/jwt-auth.guard';
 // import { AuthModule } from './modules/auth/auth.module';
@@ -12,8 +11,6 @@ import { HealthModule } from './modules/health/health.module';
 import { QuestionModule } from './modules/question/question.module';
 import { AnswerModule } from './modules/answer/answer.module';
 import { AttemptModule } from './modules/attempt/attempt.module';
-import { TestSessionController } from './modules/test-session/test-session.controller';
-import { QuestionController } from './modules/question/question.controller';
 import { TestSessionModule } from './modules/test-session/test-session.module';
 import { ResultModule } from './modules/result/result.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -27,7 +24,9 @@ import { RolesGuard } from './core/guards/roles.guard';
 import { RedisModule } from './core/redis/redis.module';
 import { seconds, ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { BullModule } from '@nestjs/bull';
-import { configValidationSchema } from './core/config/config.validation';
+import { ConfigService } from '@nestjs/config';
+import { redisOptions } from './core/config/redis.options';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AdminModule } from './modules/admin/admin.module';
 @Module({
   imports: [
@@ -38,6 +37,7 @@ import { AdminModule } from './modules/admin/admin.module';
       },
     ]),
     ConfigModule,
+    EventEmitterModule.forRoot(),
     DatabaseModule,
     AuthModule,
     AdminModule,
@@ -52,21 +52,15 @@ import { AdminModule } from './modules/admin/admin.module';
     TopcodeModule,
     PriorityModule,
     RedisModule,
-    BullModule.forRoot({
-      redis: {
-        host: configValidationSchema.validate(process.env).value.REDIS_HOST,
-        port: configValidationSchema.validate(process.env).value.REDIS_PORT,
-      },
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({ redis: redisOptions(config) }),
     }),
   ],
   providers: [
     {
       provide: APP_FILTER,
       useClass: HttpExceptionFilter,
-    },
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: LoggingInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,
@@ -86,7 +80,6 @@ import { AdminModule } from './modules/admin/admin.module';
       useClass: ThrottlerGuard,
     },
   ],
-  controllers: [TestSessionController, QuestionController],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

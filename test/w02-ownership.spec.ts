@@ -2,6 +2,7 @@ import { ChatService } from '../src/modules/chat/chat.service';
 import { ChatGateway } from '../src/modules/chat/chat.gateway';
 import { JwtService } from '@nestjs/jwt';
 import { LoggingMiddleware } from '../src/core/middleware/logging.middleware';
+import { EventEmitter } from 'events';
 
 describe('chat ownership', () => {
   it('another user cannot read session messages', async () => {
@@ -10,7 +11,6 @@ describe('chat ownership', () => {
         chatSession: { findUnique: async () => ({ userId: 2 }) },
         chatMessage: { findMany: async () => [{ content: 'private' }] },
       } as any,
-      {} as any,
       {} as any,
       {} as any,
     );
@@ -29,7 +29,6 @@ describe('chat ownership', () => {
           },
         } as any,
         {} as any,
-        {} as any,
       );
       const jwt = new JwtService({ secret: 'w02-socket-only' });
       const g = new ChatGateway(
@@ -41,6 +40,7 @@ describe('chat ownership', () => {
             throw new Error('queued without authorization');
           },
         } as any,
+        {} as any,
       );
       const socket: any = {
         handshake: { auth: { token: jwt.sign({ userId: 1 }) } },
@@ -65,6 +65,11 @@ describe('credential logging', () => {
       .spyOn(console, 'log')
       .mockImplementation((x) => output.push(JSON.stringify(x)));
     try {
+      const response: any = Object.assign(new EventEmitter(), {
+        statusCode: 200,
+        writableFinished: true,
+        setHeader: () => {},
+      });
       new LoggingMiddleware().use(
         {
           method: 'POST',
@@ -73,9 +78,11 @@ describe('credential logging', () => {
           path: '/auth/login',
           body: { password: 'secret', otp: '123456' },
         } as any,
-        { statusCode: 200 } as any,
+        response,
         () => {},
       );
+      response.emit('finish');
+      expect(output).toHaveLength(1);
       expect(output.join('')).not.toContain('secret');
       expect(output.join('')).not.toContain('123456');
     } finally {

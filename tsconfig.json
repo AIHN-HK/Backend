@@ -1,4 +1,10 @@
 {
+  "include": [
+    "src/**/*.ts",
+    "prisma/**/*.ts",
+    "scripts/**/*.ts",
+    "test/**/*.ts"
+  ],
   "compilerOptions": {
     "module": "commonjs",
     "declaration": true,

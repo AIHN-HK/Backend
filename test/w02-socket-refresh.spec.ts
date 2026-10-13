@@ -11,6 +11,7 @@ describe('socket access-token renewal', () => {
       { user: { findUnique: async () => ({ id: 1 }) } } as any,
       jwt,
       {} as any,
+      {} as any,
     );
     const socket: any = {
       handshake: { auth: { token: old } },

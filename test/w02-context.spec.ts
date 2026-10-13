@@ -46,19 +46,13 @@ describe('profile and AI context', () => {
     const ai = {
       streamAsk: (payload: any) => {
         sent = payload;
-        void payload.onEnd();
+        return Promise.resolve('completed');
       },
     };
     const s = new ChatService(
       database,
       ai as any,
       { getResultRanking: async (id: number) => ({ attemptId: id }) } as any,
-      {
-        get: async () => ({
-          basic_info: { full_name: 'POISONED' },
-          test_json: { attemptId: 99 },
-        }),
-      } as any,
     );
     await s.handleUserMessageStream(
       10,

@@ -1,18 +1,24 @@
 # Base stage with dependencies
 FROM node:20-alpine AS base
+ENV PNPM_HOME="/pnpm"
+ENV COREPACK_HOME="/pnpm/corepack"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
 
 WORKDIR /app
 
 # Install OpenSSL for Prisma
 RUN apk add --no-cache openssl
 
-COPY package*.json ./
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN corepack install
 COPY prisma ./prisma/
 
 # Dependencies stage
 FROM base AS dependencies
 
-RUN npm ci
+RUN --mount=type=cache,id=aihn-pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --store-dir=/pnpm/store
 
 # Build stage
 FROM base AS build
@@ -21,37 +27,30 @@ COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 
 # Generate Prisma Client and build
-RUN npx prisma generate && \
-    npm run build
+RUN pnpm exec prisma generate && \
+    pnpm run build
 
 # Production dependencies stage
 FROM base AS prod-dependencies
 
-RUN npm ci --only=production && \
-    npx prisma generate
+RUN --mount=type=cache,id=aihn-pnpm-store,target=/pnpm/store \
+    pnpm install --prod --frozen-lockfile --store-dir=/pnpm/store && \
+    pnpm exec prisma generate
 
 # Production stage
-FROM node:20-alpine AS production
+FROM base AS production
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Install OpenSSL for Prisma
-RUN apk add --no-cache openssl
-
-# Copy package files and prisma schema
-COPY package*.json ./
-COPY prisma ./prisma/
-
-# Copy built application and production dependencies
-COPY --from=build /app/dist ./dist
-COPY --from=prod-dependencies /app/node_modules ./node_modules
-
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nestjs -u 1001 && \
-    chown -R nestjs:nodejs /app
+    adduser -S nestjs -u 1001
+
+# Set ownership during copy instead of duplicating dependency layers with chown.
+COPY --chown=nestjs:nodejs --from=build /app/dist ./dist
+COPY --chown=nestjs:nodejs --from=prod-dependencies /app/node_modules ./node_modules
 
 USER nestjs
 

@@ -43,7 +43,10 @@ export class AdminController {
   @Get('topcodes') topcodes() {
     return this.admin.topcodes();
   }
-  @Put('priorities') priorities(@Body() body: AdminPrioritiesDto) {
-    return this.admin.priorities(body);
+  @Put('priorities') priorities(
+    @Body() body: AdminPrioritiesDto,
+    @CurrentUser('id') actorId: number,
+  ) {
+    return this.admin.priorities(body, actorId);
   }
 }

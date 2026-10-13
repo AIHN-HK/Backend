@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { isEmail } from 'class-validator';
 
@@ -60,8 +60,10 @@ export async function bootstrapAdmin(
     });
     return { created: true, id: user.id };
   } catch (error) {
-    // Another invocation may have created the admin after our first read.
-    if (error.code === 'P2002') {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
       const winner = await prisma.user.findUnique({ where: { email } });
       if (winner?.role === 'ADMIN') return { created: false, id: winner.id };
     }
@@ -73,7 +75,12 @@ export async function bootstrapAdmin(
 
 if (require.main === module) {
   const prisma = new PrismaClient();
-  bootstrapAdmin(prisma, process.env)
+  bootstrapAdmin(prisma, {
+    BOOTSTRAP_ADMIN_EMAIL: process.env.BOOTSTRAP_ADMIN_EMAIL,
+    BOOTSTRAP_ADMIN_PASSWORD: process.env.BOOTSTRAP_ADMIN_PASSWORD,
+    BOOTSTRAP_ADMIN_FULLNAME: process.env.BOOTSTRAP_ADMIN_FULLNAME,
+    BOOTSTRAP_ADMIN_YOB: process.env.BOOTSTRAP_ADMIN_YOB,
+  })
     .then((result) =>
       console.log(
         result.created

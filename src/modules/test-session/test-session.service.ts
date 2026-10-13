@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SessionRepository } from './test-session.repository';
 
-import { NotFoundException } from '@nestjs/common';
-import { QuestionRepository } from '../question/question.repository';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AttemptRepository } from '../attempt/attempt.repository';
 import { TopcodeRepository } from '../topcode/topcode.repository';
 import { RiasecScore } from 'src/core/constants/riasec.type';
@@ -12,20 +11,16 @@ import { mapAttemptToHistoryItem } from './test-session.mapper';
 import { AnalyzeDataDto, HistoryItemDto } from './dto/history-item.dto';
 import { AttemptWithResultDto } from './dto/attempt-with-result.dto';
 import { HistoryResponseDto } from './dto/history-response.dto';
-import { RedisService } from 'src/core/redis/redis.service';
 @Injectable()
 export class TestSessionService {
   constructor(
     private readonly sessionRepository: SessionRepository,
-    private readonly questionRepository: QuestionRepository,
     private readonly attemptRepository: AttemptRepository,
     private readonly topcodeRepository: TopcodeRepository,
     private readonly resultRepository: ResultRepository,
-    private readonly redisService: RedisService,
   ) {}
 
   async createSession(id: number) {
-    await this.redisService.delByPattern(`history:${id}:*`);
     return this.sessionRepository.create(id);
   }
 
@@ -34,7 +29,9 @@ export class TestSessionService {
       await this.sessionRepository.remove(id);
       return { message: `Session ${id} deleted successfully` };
     } catch (error) {
-      throw new NotFoundException(`Session with id ${id} not found`);
+      if (error.code === 'P2025')
+        throw new NotFoundException(`Session with id ${id} not found`);
+      throw error;
     }
   }
   async getHistoryUser(
@@ -43,7 +40,20 @@ export class TestSessionService {
     cursorCreatedAt?: string,
     cursorId?: number,
   ) {
-    const isFirstPage = !cursorCreatedAt && !cursorId;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+      throw new BadRequestException('limit must be between 1 and 50.');
+    }
+    if ((cursorCreatedAt !== undefined) !== (cursorId !== undefined)) {
+      throw new BadRequestException('Both cursor fields must be provided.');
+    }
+    if (
+      cursorId !== undefined &&
+      (!Number.isSafeInteger(cursorId) ||
+        cursorId < 1 ||
+        Number.isNaN(new Date(cursorCreatedAt).getTime()))
+    ) {
+      throw new BadRequestException('Invalid cursor.');
+    }
     const fetchData = async () => {
       const history: AttemptWithResultDto[] =
         await this.attemptRepository.getAttemptHistory(
@@ -126,10 +136,7 @@ export class TestSessionService {
       } as HistoryResponseDto;
     };
 
-    if (!isFirstPage) {
-      return fetchData();
-    }
-    const cacheKey = `history:${userId}:first`;
-    return this.redisService.getOrSet(cacheKey, 30, fetchData);
+    // Bounded authoritative reads avoid stale cache fills after completion.
+    return fetchData();
   }
 }

@@ -12,9 +12,9 @@ export class PriorityService {
   async getPriorities() {
     return await this.priority.getPriorities();
   }
-  async updatePriorities(data: UpdatePriorityDto) {
-    const result = await this.priority.updatePriorities(data);
-    await this.redisService.del('priority:all');
+  async updatePriorities(data: UpdatePriorityDto, actorId?: number) {
+    const result = await this.priority.updatePriorities(data, actorId);
+    await this.redisService.del('priority:all').catch(() => undefined);
     return result;
   }
 }

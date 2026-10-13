@@ -1,25 +1,19 @@
 import {
   ForbiddenException,
-  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
 import { PrismaService } from 'src/core/database/prisma.service';
 import { ClientSendMessage } from './chat.types';
-import { AiService } from './ai.service';
+import { AiService, AiStreamOutcome } from './ai.service';
+import { randomUUID } from 'crypto';
 import { ResultService } from '../result/result.service';
-import { Logger } from '@nestjs/common';
 @Injectable()
 export class ChatService {
-  private readonly logger = new Logger(ChatService.name);
-
   constructor(
     private prisma: PrismaService,
     private aiService: AiService,
     private resultService: ResultService,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async saveUserMessage(dto: ClientSendMessage) {
@@ -96,8 +90,8 @@ export class ChatService {
       },
     });
   }
-  async stopGeneration(sessionId: number) {
-    this.aiService.stopGeneration(sessionId);
+  async stopGeneration(sessionId: number, turnId?: string) {
+    this.aiService.stopGeneration(sessionId, turnId);
   }
   async handleUserMessageStream(
     sessionId: number,
@@ -106,10 +100,8 @@ export class ChatService {
     test_json: any,
     onToken: (token: string) => void,
     onEnd: () => void,
-  ) {
-    await this.prisma.chatMessage.create({
-      data: { sessionId, content, role: 'user' },
-    });
+    options: { turnId?: string; userId?: number; signal?: AbortSignal } = {},
+  ): Promise<AiStreamOutcome> {
     const session = await this.prisma.chatSession.findUnique({
       where: { id: sessionId },
       include: {
@@ -121,6 +113,13 @@ export class ChatService {
         },
       },
     });
+    if (
+      !session ||
+      (options.userId !== undefined && session.userId !== options.userId)
+    ) {
+      throw new ForbiddenException('Session does not belong to you');
+    }
+    if (options.signal?.aborted) return 'cancelled';
 
     // Authoritative reads prevent stale profile/attempt context and late cache fills.
     const [result, user] = await Promise.all([
@@ -142,33 +141,31 @@ export class ChatService {
     };
 
     test_json = test_json_context;
-
-    const history = await this.prisma.$transaction(async (tx) => {
-      const messages = await tx.chatMessage.findMany({
-        where: {
-          sessionId,
-          checkpoint: 0,
-        },
-        orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          role: true,
-          content: true,
-        },
-      });
-
-      await tx.chatMessage.updateMany({
-        where: {
-          sessionId,
-          checkpoint: 0,
-        },
-        data: {
-          checkpoint: 1,
-        },
-      });
-
-      return messages;
+    await this.prisma.chatMessage.create({
+      data: { sessionId, content, role: 'user' },
     });
+    const history = await this.prisma.chatMessage.findMany({
+      where: {
+        sessionId,
+        checkpoint: 0,
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 201,
+      select: {
+        id: true,
+        role: true,
+        content: true,
+      },
+    });
+    if (
+      history.length > 200 ||
+      history.reduce((size, message) => size + message.content.length, 0) >
+        100000
+    ) {
+      throw new Error(
+        'Pending chat history exceeded its limit; start a new session.',
+      );
+    }
     profile_json = {
       form_date: new Date().toISOString().slice(0, 10),
       basic_info,
@@ -202,42 +199,36 @@ export class ChatService {
       },
     });
 
-    return new Promise<void>((resolve, reject) => {
-      let fullAnswer = '';
-
-      this.aiService.streamAsk({
-        sessionId,
-        message: content,
-        profile_json,
-        test_json,
-        history,
-        onToken: (token) => {
-          fullAnswer += token;
-          onToken(token);
+    let fullAnswer = '';
+    const outcome = await this.aiService.streamAsk({
+      sessionId,
+      turnId: options.turnId ?? randomUUID(),
+      signal: options.signal,
+      message: content,
+      profile_json,
+      test_json,
+      history,
+      onToken: (token) => {
+        fullAnswer += token;
+        onToken(token);
+      },
+    });
+    if (outcome === 'cancelled' || options.signal?.aborted) return 'cancelled';
+    await this.prisma.$transaction(async (tx) => {
+      await tx.chatMessage.create({
+        data: { sessionId, role: 'assistant', content: fullAnswer },
+      });
+      await tx.chatMessage.updateMany({
+        where: {
+          sessionId,
+          id: { in: history.map((message) => message.id) },
+          checkpoint: 0,
         },
-        onEnd: async () => {
-          try {
-            await this.prisma.chatMessage.create({
-              data: {
-                sessionId,
-                role: 'assistant',
-                content: fullAnswer,
-              },
-            });
-          } catch (err) {
-            this.logger.error('Save assistant message error', err);
-          }
-
-          onEnd();
-          resolve();
-        },
-
-        onError: (err) => {
-          this.logger.error('AI error', err);
-          reject(new Error(err));
-        },
+        data: { checkpoint: 1 },
       });
     });
+    onEnd();
+    return 'completed';
   }
 
   async getSessionsChatByUser(userId: number) {

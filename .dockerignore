@@ -1,4 +1,7 @@
 node_modules
+.pnpm-store
+.serena
+docs
 dist
 .env*
 !.env.example

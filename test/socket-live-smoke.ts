@@ -9,8 +9,12 @@ import { getQueueToken } from '@nestjs/bull';
 import { ChatGateway } from '../src/modules/chat/chat.gateway';
 import { ChatService } from '../src/modules/chat/chat.service';
 import { PrismaService } from '../src/core/database/prisma.service';
-import { updateSocketAuth } from '../../Frontend-----API/src/helpers/socketAuth';
-import { io } from '../../Frontend-----API/node_modules/socket.io-client';
+import { ChatTurnService } from '../src/modules/chat/chat-turn.service';
+const updateSocketAuth = (socket: any, token: string) => {
+  socket.auth = { token };
+  socket.emit('refresh_auth', { token });
+};
+import { io } from 'socket.io-client';
 async function main() {
   const url = new URL(process.env.DATABASE_URL!);
   if (!['localhost', '127.0.0.1', '::1'].includes(url.hostname))
@@ -51,17 +55,38 @@ async function main() {
       ),
     );
     await prisma.attempt.create({
-      data: { userId: users[0].id, totalQuestions: 0 },
+      data: {
+        userId: users[0].id,
+        totalQuestions: 0,
+        finishAt: new Date(),
+        result: {
+          create: {
+            scoreR: 0,
+            scoreI: 0,
+            scoreA: 0,
+            scoreS: 0,
+            scoreE: 0,
+            scoreC: 0,
+            topCode: 'RIA',
+          },
+        },
+      },
     });
     const service = new ChatService(
       prisma as any,
       { stopGeneration: () => {} } as any,
       {} as any,
-      {} as any,
     );
     const mod = await Test.createTestingModule({
       providers: [
         ChatGateway,
+        {
+          provide: ChatTurnService,
+          useValue: {
+            reserve: async () => randomUUID(),
+            release: async () => {},
+          },
+        },
         { provide: ChatService, useValue: service },
         { provide: PrismaService, useValue: prisma },
         { provide: JwtService, useValue: jwt },
@@ -133,6 +158,9 @@ async function main() {
       })
     ).map((u) => u.id);
     await prisma.chatSession.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.result.deleteMany({
+      where: { attempt: { userId: { in: ids } } },
+    });
     await prisma.attempt.deleteMany({ where: { userId: { in: ids } } });
     await prisma.user.deleteMany({ where: { email: { in: emails } } });
     await prisma.$disconnect();

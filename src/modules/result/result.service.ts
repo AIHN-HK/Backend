@@ -62,7 +62,9 @@ export class ResultService {
       );
     }
     if (!result) {
-      throw new Error(`Result for Attempt ID ${attemptId} does not exist.`);
+      throw new NotFoundException(
+        `Result for Attempt ID ${attemptId} does not exist.`,
+      );
     }
     const topCode = result.topCode;
     const score = this.buildScores(result);
@@ -84,6 +86,12 @@ export class ResultService {
     };
   }
   async Getsnapshot(attemptId: number, userId: number) {
+    const owner = await this.attemptRepository.findByIdAndUser(
+      attemptId,
+      userId,
+    );
+    if (!owner)
+      throw new NotFoundException('Attempt does not belong to the user.');
     // const [belongsToUser, snapshot] = await Promise.all([
     //   this.attemptRepository.findByIdAndUser(attemptId, userId),
     //   this.resultRepository.getSnapshotByAttemptId(attemptId),
@@ -92,15 +100,6 @@ export class ResultService {
       `snapshot:${userId}:${attemptId}`,
       604800,
       async () => {
-        const belongsToUser = await this.attemptRepository.findByIdAndUser(
-          attemptId,
-          userId,
-        );
-        if (!belongsToUser) {
-          throw new NotFoundException(
-            `Attempt with ID ${attemptId} does not belong to the user.`,
-          );
-        }
         return this.resultRepository.getSnapshotByAttemptId(attemptId);
       },
     );

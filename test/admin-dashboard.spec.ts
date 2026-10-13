@@ -31,6 +31,7 @@ describe('admin dashboard contract', () => {
     createdAt: new Date('2026-01-01'),
   };
   const prisma: any = {
+    adminAuditLog: { create: async () => ({}) },
     user: {
       count: async () => 1,
       findMany: async (query: any) => {
@@ -200,10 +201,6 @@ describe('admin dashboard contract', () => {
 
 describe('new grading after priority changes', () => {
   it('uses authoritative priority ordering even when an old cache fill is still present', async () => {
-    const old = ['R', 'I', 'A', 'S', 'E', 'C'].map((type, i) => ({
-      type,
-      priority: i + 1,
-    }));
     const current = ['I', 'R', 'A', 'S', 'E', 'C'].map((type, i) => ({
       type,
       priority: i + 1,
@@ -213,9 +210,7 @@ describe('new grading after priority changes', () => {
       null,
       null,
       null,
-      null,
       { getPriorities: async () => current } as any,
-      { getOrSet: async () => old } as any,
       null,
     );
     expect(

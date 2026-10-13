@@ -4,6 +4,7 @@
   "description": "",
   "author": "",
   "private": true,
+  "packageManager": "pnpm@10.33.2",
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build && tsc prisma/seed.ts --outDir dist/prisma --module commonjs --esModuleInterop",
@@ -11,9 +12,12 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main",
     "seed:dev": "ts-node prisma/seed.ts",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
+    "lint:fix": "pnpm exec eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test --runInBand && pnpm run build",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -22,14 +26,28 @@
     "admin:bootstrap": "ts-node -r dotenv/config scripts/bootstrap-admin.ts",
     "test:auth": "jest --config test/jest-auth.json --runInBand",
     "test:admin": "jest --config test/jest-admin.json --runInBand",
+    "test:profile": "jest --config test/jest-profile.json --runInBand",
+    "test:backend:live": "pnpm run build && ts-node -r tsconfig-paths/register test/backend-fixes-live-smoke.ts",
     "test:admin:live": "node test/admin-live-smoke.cjs"
   },
   "prisma": {
     "seed": "node dist/prisma/seed.js"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "bcrypt",
+      "msgpackr-extract",
+      "prisma"
+    ],
+    "ignoredBuiltDependencies": [
+      "@nestjs/core",
+      "@scarf/scarf"
+    ]
+  },
   "dependencies": {
     "@nestjs/bull": "^11.0.4",
-    "@nestjs/cache-manager": "^3.1.0",
     "@nestjs/common": "^11.1.11",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.11",
@@ -46,9 +64,6 @@
     "@sendgrid/mail": "^8.1.6",
     "bcrypt": "^6.0.0",
     "bull": "^4.16.5",
-    "cache-manager": "^7.2.8",
-    "cache-manager-ioredis": "^2.1.0",
-    "cache-manager-redis-store": "^2.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
     "compression": "^1.8.1",
@@ -88,6 +103,7 @@
     "jest": "^29.5.0",
     "prettier": "^3.0.0",
     "source-map-support": "^0.5.21",
+    "socket.io-client": "^4.8.1",
     "supertest": "^6.3.3",
     "ts-jest": "^29.1.0",
     "ts-loader": "^9.4.3",
@@ -101,8 +117,14 @@
       "json",
       "ts"
     ],
-    "rootDir": "src",
-    "testRegex": ".*\\.spec\\.ts$",
+    "rootDir": ".",
+    "testMatch": [
+      "<rootDir>/src/**/*.spec.ts",
+      "<rootDir>/test/**/*.spec.ts"
+    ],
+    "moduleNameMapper": {
+      "^src/(.*)$": "<rootDir>/src/$1"
+    },
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },

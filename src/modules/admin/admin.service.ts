@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
+import { recordAdminAudit } from '../../core/database/admin-audit';
 import { RedisService } from '../../core/redis/redis.service';
 import { AdminPageDto, AdminPrioritiesDto } from './admin.dto';
 
@@ -153,7 +154,7 @@ export class AdminService {
     return this.prisma.topCode.findMany({ orderBy: { id: 'asc' } });
   }
 
-  async priorities({ priorities }: AdminPrioritiesDto) {
+  async priorities({ priorities }: AdminPrioritiesDto, actorId?: number) {
     if (
       new Set(priorities.map((p) => p.type)).size !== 6 ||
       new Set(priorities.map((p) => p.priority)).size !== 6
@@ -175,7 +176,7 @@ export class AdminService {
               'Bảng độ ưu tiên chưa có đủ 6 nhóm hợp lệ.',
             );
           }
-          return Promise.all(
+          const updated = await Promise.all(
             priorities.map((p) =>
               tx.priority.update({
                 where: { id: rows.find((row) => row.type === p.type).id },
@@ -183,10 +184,20 @@ export class AdminService {
               }),
             ),
           );
+          await recordAdminAudit(
+            tx,
+            actorId,
+            'Priority',
+            'reordered',
+            'all',
+            rows,
+            updated,
+          );
+          return updated;
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
-      await this.redis.del('priority:all');
+      await this.redis.del('priority:all').catch(() => undefined);
       return result;
     } catch (error) {
       if (error.code === 'P2034')

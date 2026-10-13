@@ -1,12 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
 import * as cookieParser from 'cookie-parser';
 import { NestExpressApplication } from '@nestjs/platform-express/interfaces/nest-express-application.interface';
 import * as compression from 'compression';
+import { allowedOrigins } from './core/config/cors.options';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -16,7 +17,8 @@ async function bootstrap() {
   const port = configService.get<number>('PORT', 3000);
   const apiVersion = configService.get<string>('API_VERSION', 'v1');
   const nodeEnv = configService.get<string>('NODE_ENV', 'development');
-  app.set('trust proxy', 1);
+  app.set('trust proxy', configService.get<number>('TRUST_PROXY_HOPS', 0));
+  app.enableShutdownHooks();
   app.setGlobalPrefix(`api/${apiVersion}`);
 
   const config = new DocumentBuilder()
@@ -49,17 +51,13 @@ async function bootstrap() {
     customCss: '.swagger-ui .topbar { display: none }',
   });
   app.enableCors({
-    origin: configService.get<string>('CORS_ORIGINS')?.split(',') || true,
+    origin: allowedOrigins(
+      configService.get<string>('CORS_ORIGINS'),
+      nodeEnv === 'production',
+    ),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
-  app.useGlobalPipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
 
   app.use(cookieParser());
   app.use(

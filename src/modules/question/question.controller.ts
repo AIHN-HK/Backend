@@ -15,6 +15,7 @@ import { QuestionService } from './question.service';
 import { BulkCreateQuestionDto } from './dto/bulk-create-question.dto';
 import { ResponseMessage } from 'src/core/decorators/response-message.decorator';
 import { Public } from 'src/core/decorators/public.decorator';
+import { CurrentUser } from '../../core/decorators/current-user.decorator';
 
 @Controller('question')
 export class QuestionController {
@@ -22,9 +23,15 @@ export class QuestionController {
   @ResponseMessage('Question created successfully')
   @Roles(UserRole.ADMIN)
   @Post()
-  async create(@Body() createQuestionDto: QuestionDto) {
+  async create(
+    @Body() createQuestionDto: QuestionDto,
+    @CurrentUser('id') actorId: number,
+  ) {
     return {
-      data: await this.questionService.createQuestion(createQuestionDto),
+      data: await this.questionService.createQuestion(
+        createQuestionDto,
+        actorId,
+      ),
     };
   }
   @Roles(UserRole.ADMIN)
@@ -32,8 +39,9 @@ export class QuestionController {
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateQuestionDto: QuestionDto,
+    @CurrentUser('id') actorId: number,
   ) {
-    return this.questionService.updateQuestion(id, updateQuestionDto);
+    return this.questionService.updateQuestion(id, updateQuestionDto, actorId);
   }
   @Public()
   @ResponseMessage('Question retrieved successfully')
@@ -46,9 +54,12 @@ export class QuestionController {
   @ResponseMessage('Question deleted successfully')
   @Roles(UserRole.ADMIN)
   @Delete(':id')
-  async deleteQuestion(@Param('id', ParseIntPipe) id: number) {
+  async deleteQuestion(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('id') actorId: number,
+  ) {
     return {
-      data: await this.questionService.deleteQuestion(id),
+      data: await this.questionService.deleteQuestion(id, actorId),
     };
   }
   @Public()
@@ -62,9 +73,12 @@ export class QuestionController {
   @ResponseMessage('Questions created successfully')
   @Roles(UserRole.ADMIN)
   @Post('bulk')
-  async createManyQuestion(@Body() dto: BulkCreateQuestionDto) {
+  async createManyQuestion(
+    @Body() dto: BulkCreateQuestionDto,
+    @CurrentUser('id') actorId: number,
+  ) {
     return {
-      data: await this.questionService.createMany(dto.questions),
+      data: await this.questionService.createMany(dto.questions, actorId),
     };
   }
 }

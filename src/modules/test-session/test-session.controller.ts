@@ -6,7 +6,6 @@ import {
   Delete,
   Param,
   ParseIntPipe,
-  NotFoundException,
   Get,
   Query,
 } from '@nestjs/common';
@@ -14,6 +13,7 @@ import { TestSessionService } from './test-session.service';
 import { ResponseMessage } from 'src/core/decorators/response-message.decorator';
 import { CurrentUser } from 'src/core/decorators/current-user.decorator';
 import { ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { HistoryQueryDto } from './dto/history-query.dto';
 
 // import { Session } from 'inspector/promises';
 @Controller('test-session')
@@ -30,11 +30,7 @@ export class TestSessionController {
   @Roles(UserRole.ADMIN)
   @Delete(':id')
   async remove(@Param('id', ParseIntPipe) id: number) {
-    try {
-      return await this.sessionService.deleteSession(id);
-    } catch (error) {
-      throw new NotFoundException(`Session with id ${id} not found`);
-    }
+    return this.sessionService.deleteSession(id);
   }
   @ApiQuery({
     name: 'limit',
@@ -59,15 +55,13 @@ export class TestSessionController {
   @Get('history-by-user')
   async getHistory(
     @CurrentUser('id') userId: number,
-    @Query('limit') limit?: string,
-    @Query('cursorCreatedAt') cursorCreatedAt?: string,
-    @Query('cursorId') cursorId?: string,
+    @Query() query: HistoryQueryDto,
   ) {
     return this.sessionService.getHistoryUser(
       userId,
-      Number(limit) || 10,
-      cursorCreatedAt,
-      cursorId ? Number(cursorId) : undefined,
+      query.limit,
+      query.cursorCreatedAt,
+      query.cursorId,
     );
   }
 }

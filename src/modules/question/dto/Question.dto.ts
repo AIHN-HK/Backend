@@ -6,7 +6,7 @@ export class QuestionDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(2000)
-  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   content: string;
 
   @IsEnum(RiasecType)
