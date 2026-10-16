@@ -34,7 +34,8 @@
     "test:admin": "jest --config test/jest-admin.json --runInBand",
     "test:profile": "jest --config test/jest-profile.json --runInBand",
     "test:backend:live": "pnpm run build && ts-node -r tsconfig-paths/register test/backend-fixes-live-smoke.ts",
-    "test:admin:live": "node test/admin-live-smoke.cjs"
+    "test:admin:live": "node test/admin-live-smoke.cjs",
+    "student:seed-test": "ts-node scripts/create-student-and-take-test.ts"
   },
   "prisma": {
     "seed": "node dist/prisma/seed.js"

@@ -1,7 +1,7 @@
 {
   "rootDir": "..",
   "moduleFileExtensions": ["js", "json", "ts"],
-  "testRegex": "test/w02-.*\\.spec\\.ts$",
+  "testRegex": "test/(auth-security|admin-bootstrap|profile-chat-context|error-logging|chat-ownership|admin-rbac|socket-auth-refresh|auth-transactions)\\.spec\\.ts$",
   "transform": { "^.+\\.(t|j)s$": "ts-jest" },
   "moduleNameMapper": { "^src/(.*)$": "<rootDir>/src/$1" },
   "testEnvironment": "node"
