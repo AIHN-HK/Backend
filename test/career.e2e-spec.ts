@@ -300,6 +300,14 @@ describe('career journey against migrated PostgreSQL, Redis, Bull and local AI p
       .get('/api/v1/careers/15-1252.00')
       .expect(200);
     const revision = detail.body.data.revision;
+    await importCareerData(fixture.prisma);
+    expect(
+      (
+        await fixture.prisma.career.findUniqueOrThrow({
+          where: { id: '15-1252.00' },
+        })
+      ).revision,
+    ).toBe(revision);
     await request(fixture.origin)
       .patch('/api/v1/admin/career-data/15-1252.00')
       .auth(adminToken, { type: 'bearer' })

@@ -130,7 +130,15 @@ export function scoreCareer(
     sourceUrl: career.sourceUrl,
     components,
     contributions,
-    score: sum ? contributions.reduce((s, c) => s + c.contribution, 0) : null,
+    score: sum
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            contributions.reduce((s, c) => s + c.contribution, 0),
+          ),
+        )
+      : null,
     skillCoverage: totalWeight ? knownWeight / totalWeight : 0,
     missing: (Object.keys(components) as (keyof typeof components)[]).filter(
       (k) => components[k] === null,

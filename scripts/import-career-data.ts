@@ -80,6 +80,32 @@ export async function importCareerData(db: PrismaClient) {
           update: { name: skill.name },
         });
       for (const { skills, ...row } of data.careers) {
+        const existing = await tx.career.findUnique({
+          where: { id: row.id },
+          include: { skills: true },
+        });
+        const oldVector = existing?.riasec as
+          | Record<string, number>
+          | undefined;
+        if (
+          existing &&
+          existing.title === row.title &&
+          existing.description === row.description &&
+          existing.sourceVersion === row.sourceVersion &&
+          existing.sourceUrl === row.sourceUrl &&
+          Object.entries(row.riasec).every(([k, v]) => oldVector?.[k] === v) &&
+          existing.skills.length === skills.length &&
+          skills.every((s) =>
+            existing.skills.some(
+              (old) =>
+                old.skillId === s.skillId &&
+                old.level === s.level &&
+                old.importance === s.importance,
+            ),
+          )
+        )
+          continue;
+
         await tx.career.upsert({
           where: { id: row.id },
           create: { ...row, skills: { create: skills } },

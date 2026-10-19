@@ -130,7 +130,10 @@ export class CareerRepository {
       });
       if (changed.count !== 1)
         throw new ConflictException('Career changed; reload before saving');
-      const after = await tx.career.findUniqueOrThrow({ where: { id } });
+      const after = await tx.career.findUniqueOrThrow({
+        where: { id },
+        include: careerInclude,
+      });
       await recordAdminAudit(
         tx,
         actorId,
