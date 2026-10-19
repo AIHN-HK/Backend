@@ -7,7 +7,7 @@ import {
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import sharp = require('sharp');
+import { avatarImage as sharp } from './avatar-image';
 
 export const AVATAR_DIRECTORY = Symbol('AVATAR_DIRECTORY');
 export const MAX_AVATAR_BYTES = 5 * 1024 * 1024;

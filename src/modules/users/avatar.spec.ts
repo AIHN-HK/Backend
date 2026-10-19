@@ -6,7 +6,7 @@ import { Reflector } from '@nestjs/core';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import sharp = require('sharp');
+import { avatarImage as sharp } from './avatar-image';
 import request = require('supertest');
 import { AvatarController } from './avatar.controller';
 import {
