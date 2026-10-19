@@ -52,6 +52,7 @@ RUN addgroup -g 1001 -S nodejs && \
 
 # Set ownership during copy instead of duplicating dependency layers with chown.
 COPY --chown=nestjs:nodejs --from=build /app/dist ./dist
+COPY --chown=nestjs:nodejs --from=build /app/data ./data
 COPY --chown=nestjs:nodejs --from=prod-dependencies /app/node_modules ./node_modules
 
 USER nestjs

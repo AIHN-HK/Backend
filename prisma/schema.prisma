@@ -23,6 +23,9 @@ model User {
   attempts      Attempt[]
   chatSessions  ChatSession[]
   refreshTokens RefreshToken[]
+  careerProfile CareerProfile?
+  recommendations RecommendationRun[]
+  careerGoals CareerGoal[]
 }
 
 model Otp {
@@ -70,6 +73,7 @@ model Attempt {
   chatSessions   ChatSession[]
   result         Result?
   snapshots      SnapShot?
+  recommendations RecommendationRun[]
 
   @@index([userId, finishAt, createdAt, id])
 }
@@ -218,4 +222,85 @@ enum OtpType {
 enum ChatSessionStatus {
   ACTIVE
   CLOSED
+}
+
+// Career data is versioned, sourced and published independently of assessment scoring.
+model Career {
+  id String @id
+  title String
+  description String
+  riasec Json
+  sourceVersion String
+  sourceUrl String
+  active Boolean @default(true)
+  revision Int @default(1)
+  skills CareerSkill[]
+  profiles CareerProfile[]
+  goals CareerGoal[]
+}
+
+model Skill {
+  id String @id
+  name String
+  careers CareerSkill[]
+}
+
+model CareerSkill {
+  careerId String
+  skillId String
+  importance Float
+  level Float
+  career Career @relation(fields: [careerId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id])
+  @@id([careerId, skillId])
+}
+
+model CareerProfile {
+  userId Int @id
+  revision Int @default(1)
+  skills Json
+  interests Json?
+  targetCareerId String?
+  user User @relation(fields: [userId], references: [id])
+  target Career? @relation(fields: [targetCareerId], references: [id])
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model RecommendationRun {
+  id String @id @default(uuid())
+  userId Int
+  attemptId Int
+  algorithmVersion String
+  input Json
+  items Json
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id])
+  attempt Attempt @relation(fields: [attemptId], references: [id])
+  @@index([userId, createdAt, id])
+}
+
+model CareerGoal {
+  id String @id @default(uuid())
+  userId Int
+  careerId String
+  title String
+  revision Int @default(1)
+  evidence Json
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id])
+  career Career @relation(fields: [careerId], references: [id])
+  tasks GoalTask[]
+  @@unique([userId, careerId])
+}
+
+model GoalTask {
+  id String @id @default(uuid())
+  goalId String
+  skillId String
+  title String
+  evidence String @default("")
+  done Boolean @default(false)
+  position Int
+  goal CareerGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  @@index([goalId, position])
 }

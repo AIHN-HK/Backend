@@ -17,7 +17,12 @@
     "src/modules/chat/chat.processor.ts",
     "src/modules/chat/chat.gateway.ts",
     "src/modules/chat/ai.service.ts",
-    "src/modules/admin/**/*.ts"
+    "src/modules/admin/**/*.ts",
+    "src/modules/career/**/*.ts"
   ],
-  "exclude": ["**/*.spec.ts", "node_modules", "dist"]
+  "exclude": [
+    "**/*.spec.ts",
+    "node_modules",
+    "dist"
+  ]
 }

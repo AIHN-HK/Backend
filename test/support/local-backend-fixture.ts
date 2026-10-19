@@ -46,7 +46,10 @@ export class LocalBackendFixture {
   private app: ChildProcess;
   private log: WriteStream;
   private stopped = false;
-  constructor(private readonly image?: string) {}
+  constructor(
+    private readonly image?: string,
+    private readonly overrides: Record<string, string> = {},
+  ) {}
 
   async start() {
     try {
@@ -127,11 +130,13 @@ export class LocalBackendFixture {
         PORT: String(port),
         JWT_ACCESS_SECRET: this.secret,
         JWT_REFRESH_SECRET: randomUUID(),
+        OTP_HASH_SECRET: this.secret,
         REDIS_HOST: '127.0.0.1',
         REDIS_PORT: String(redisPort),
         REDIS_PASSWORD: password,
         AI_WS_URL: 'ws://127.0.0.1:1',
         CORS_ORIGINS: this.origin,
+        ...this.overrides,
       };
       this.log = createWriteStream(join(this.directory, 'application.log'));
       const dockerEnv = [
@@ -141,6 +146,7 @@ export class LocalBackendFixture {
         'PORT',
         'JWT_ACCESS_SECRET',
         'JWT_REFRESH_SECRET',
+        'OTP_HASH_SECRET',
         'REDIS_HOST',
         'REDIS_PORT',
         'REDIS_PASSWORD',

@@ -1,7 +1,8 @@
 import { Prisma } from '@prisma/client';
 
-type Entity = 'Question' | 'Priority' | 'TopCode';
+type Entity = 'Question' | 'Priority' | 'TopCode' | 'Career';
 const fields: Record<Entity, string[]> = {
+  Career: ['id', 'title', 'active', 'revision', 'sourceVersion', 'sourceUrl'],
   Question: ['id', 'content', 'type', 'dimension'],
   Priority: ['id', 'type', 'priority'],
   TopCode: [

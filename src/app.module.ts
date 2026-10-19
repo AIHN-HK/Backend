@@ -27,6 +27,7 @@ import { BullModule } from '@nestjs/bull';
 import { ConfigService } from '@nestjs/config';
 import { redisOptions } from './core/config/redis.options';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { CareerModule } from './modules/career';
 import { AdminModule } from './modules/admin';
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { AdminModule } from './modules/admin';
     DatabaseModule,
     AuthModule,
     AdminModule,
+    CareerModule,
     // UsersModule,
     HealthModule,
     QuestionModule,
