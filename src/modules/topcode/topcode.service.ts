@@ -9,9 +9,9 @@ export class TopcodeService {
     private readonly topcodeRepository: TopcodeRepository,
     private readonly redisService: RedisService,
   ) {}
-  async updateTopcode(data: UpdateTopcodeBodyDto) {
-    const result = await this.topcodeRepository.updateTopcode(data);
-    await this.redisService.delByPattern('topcode:*');
+  async updateTopcode(data: UpdateTopcodeBodyDto, actorId?: number) {
+    const result = await this.topcodeRepository.updateTopcode(data, actorId);
+    await this.redisService.delByPattern('topcode:*').catch(() => undefined);
     return result;
   }
 }

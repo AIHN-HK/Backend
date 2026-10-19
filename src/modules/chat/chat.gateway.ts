@@ -9,17 +9,28 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
-import { ClientSendMessage } from './chat.types';
 
-import { Logger } from '@nestjs/common';
-import { PrismaService } from 'src/core/database/prisma.service';
+import { ConflictException, Logger } from '@nestjs/common';
+import { ChatTurnService } from './chat-turn.service';
+import { ChatRepository } from './chat.repository';
 import { JwtService } from '@nestjs/jwt';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { OnEvent } from '@nestjs/event-emitter';
+import { allowedOrigins } from '../../core/config/cors.options';
+import {
+  ChatEndEvent,
+  ChatTokenEvent,
+  hasSessionId,
+  isChatMessage,
+  isRecord,
+} from './chat.contracts';
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: allowedOrigins(
+      process.env.CORS_ORIGINS,
+      process.env.NODE_ENV === 'production',
+    ),
   },
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -28,11 +39,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   server: Server;
   constructor(
     private chatService: ChatService,
-    private prisma: PrismaService,
+    private readonly repository: ChatRepository,
     private jwtService: JwtService,
     @InjectQueue('ai-chat-queue') private aiChatQueue: Queue,
+    private readonly turns: ChatTurnService,
   ) {}
-  private generatingMap = new Map<number, boolean>();
+  private generatingMap = new Map<number, string>();
   async handleConnection(client: Socket) {
     try {
       const token = client.handshake.auth.token;
@@ -44,13 +56,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       const payload = this.jwtService.verify(token);
+      const owner = await this.repository.findUser(payload.userId);
+      if (!owner) throw new Error('User not found');
       client.data.user = payload;
       const userId = payload.userId;
 
-      const attempt = await this.prisma.attempt.findFirst({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-      });
+      const attempt = await this.repository.latestCompletedAttempt(userId);
 
       if (!attempt) {
         this.logger.warn(
@@ -75,7 +86,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         title: session.title,
       });
     } catch (error) {
-      this.logger.error(`Connection error: ${error.message}`, error.stack);
+      this.logger.error('Chat connection rejected');
       client.emit('error', { message: 'Authentication failed' });
       client.disconnect();
     }
@@ -142,13 +153,65 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.warn(`WS client disconnected: ${client.id}`);
   }
 
-  @SubscribeMessage('send_message')
-  async handleMessage(
-    @MessageBody() payload: ClientSendMessage,
+  private async authorizeSession(socket: Socket, sessionId: number) {
+    try {
+      const payload = this.jwtService.verify(socket.handshake.auth.token);
+      if (payload.userId !== socket.data.user?.userId)
+        throw new Error('Account changed');
+      const user = await this.repository.findUser(payload.userId);
+      if (!user) throw new Error('User not found');
+      await this.chatService.assertSessionOwner(sessionId, payload.userId);
+      return true;
+    } catch {
+      socket.emit('error', {
+        message: 'Session access denied or authentication expired',
+      });
+      return false;
+    }
+  }
+
+  @SubscribeMessage('refresh_auth')
+  async handleRefreshAuth(
+    @MessageBody() data: unknown,
     @ConnectedSocket() socket: Socket,
   ) {
+    try {
+      if (!isRecord(data) || typeof data.token !== 'string' || !data.token)
+        throw new Error('Invalid token');
+      const payload = this.jwtService.verify(data.token);
+      if (payload.userId !== socket.data.user?.userId)
+        throw new Error('Account changed');
+      const user = await this.repository.findUser(payload.userId);
+      if (!user) throw new Error('User not found');
+      socket.handshake.auth.token = data.token;
+      socket.emit('auth_refreshed');
+    } catch {
+      socket.emit('error', { message: 'Authentication renewal rejected' });
+    }
+  }
+
+  @SubscribeMessage('send_message')
+  async handleMessage(
+    @MessageBody() payload: unknown,
+    @ConnectedSocket() socket: Socket,
+  ) {
+    if (!hasSessionId(payload)) {
+      socket.emit('error', {
+        message: 'Session access denied or authentication expired',
+      });
+      return;
+    }
+    if (!(await this.authorizeSession(socket, payload.sessionId))) return;
+    if (!isChatMessage(payload)) {
+      socket.emit('error', {
+        code: 'INVALID_CHAT_MESSAGE',
+        message: 'Message must contain 1–8000 characters.',
+      });
+      return;
+    }
     if (payload.sessionId && socket.data.sessionId !== payload.sessionId) {
-      if (socket.data.sessionId) socket.leave(`session-${socket.data.sessionId}`);
+      if (socket.data.sessionId)
+        socket.leave(`session-${socket.data.sessionId}`);
       socket.join(`session-${payload.sessionId}`);
       socket.data.sessionId = payload.sessionId;
     }
@@ -165,80 +228,134 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('ask')
   async handleAsk(
     @MessageBody()
-    data: {
-      sessionId: number;
-      basic_info: any;
-      profile_json: any;
-      content: string;
-    },
+    data: unknown,
     @ConnectedSocket() socket: Socket,
   ) {
-    if (data.sessionId && socket.data.sessionId !== data.sessionId) {
-      if (socket.data.sessionId) socket.leave(`session-${socket.data.sessionId}`);
+    if (!hasSessionId(data)) {
+      socket.emit('error', {
+        message: 'Session access denied or authentication expired',
+      });
+      return;
+    }
+    if (!(await this.authorizeSession(socket, data.sessionId))) return;
+    if (!isChatMessage(data)) {
+      socket.emit('error', {
+        code: 'INVALID_CHAT_MESSAGE',
+        message: 'Message must contain 1–8000 characters.',
+      });
+      return;
+    }
+    if (socket.data.sessionId !== data.sessionId) {
+      if (socket.data.sessionId)
+        socket.leave(`session-${socket.data.sessionId}`);
       socket.join(`session-${data.sessionId}`);
       socket.data.sessionId = data.sessionId;
     }
-
-    this.generatingMap.set(data.sessionId, true);
-
-    await this.aiChatQueue.add('process-ask', {
-      sessionId: data.sessionId,
-      basic_info: data.basic_info,
-      profile_json: data.profile_json,
-      content: data.content,
-    });
-
-    this.server.to(`session-${data.sessionId}`).emit('queue_joined', {
-      sessionId: data.sessionId,
-      message: 'Hệ thống đang xử lý yêu cầu, vui lòng chờ...',
-    });
-    // this.chatService.handleUserMessageStream(
-    //   data.sessionId,
-    //   data.content,
-    //   data.basic_info,
-    //   data.profile_json,
-    //   (token) => {
-    //     if (!this.generatingMap.get(data.sessionId)) return;
-    //     this.server.to(`session-${data.sessionId}`).emit('answer_token', {
-    //       sessionId: data.sessionId,
-    //       content: token,
-    //     });
-    //   },
-
-    //   () => {
-    //     this.generatingMap.set(data.sessionId, false);
-
-    //     this.server.to(`session-${data.sessionId}`).emit('answer_end', {
-    //       sessionId: data.sessionId,
-    //     });
-    //   },
-    // );
+    let turnId: string | undefined;
+    try {
+      turnId = await this.turns.reserve(data.sessionId);
+      this.generatingMap.set(data.sessionId, turnId);
+      await this.aiChatQueue.add(
+        'process-ask',
+        {
+          sessionId: data.sessionId,
+          turnId,
+          content: data.content,
+          userId: socket.data.user.userId,
+        },
+        {
+          jobId: turnId,
+          attempts: 1,
+          removeOnComplete: 100,
+          removeOnFail: 100,
+        },
+      );
+      this.server.to(`session-${data.sessionId}`).emit('queue_joined', {
+        sessionId: data.sessionId,
+        turnId,
+        message: 'Hệ thống đang xử lý yêu cầu, vui lòng chờ...',
+      });
+    } catch (error) {
+      if (turnId) {
+        await this.turns.release(data.sessionId, turnId).catch(() => undefined);
+        if (this.generatingMap.get(data.sessionId) === turnId)
+          this.generatingMap.delete(data.sessionId);
+      }
+      socket.emit('error', {
+        code:
+          error instanceof ConflictException
+            ? 'CHAT_BUSY'
+            : 'CHAT_QUEUE_UNAVAILABLE',
+        message:
+          error instanceof ConflictException
+            ? 'Một lượt chat đang chờ hoặc đang chạy.'
+            : 'Hàng đợi chat tạm thời không khả dụng.',
+      });
+    }
   }
   @OnEvent('chat.token')
-  handleChatToken(payload: { sessionId: number; token: string }) {
-    if (!this.generatingMap.get(payload.sessionId)) return;
+  handleChatToken(payload: ChatTokenEvent) {
+    if (this.generatingMap.get(payload.sessionId) !== payload.turnId) return;
     this.server.to(`session-${payload.sessionId}`).emit('answer_token', {
       sessionId: payload.sessionId,
       content: payload.token,
+      turnId: payload.turnId,
     });
   }
   @OnEvent('chat.end')
-  handleChatEnd(payload: { sessionId: number }) {
-    this.generatingMap.set(payload.sessionId, false);
-    this.server.to(`session-${payload.sessionId}`).emit('answer_end', {
-      sessionId: payload.sessionId,
-    });
+  handleChatEnd(payload: ChatEndEvent) {
+    if (this.generatingMap.get(payload.sessionId) !== payload.turnId) return;
+    this.generatingMap.delete(payload.sessionId);
+    this.server.to(`session-${payload.sessionId}`).emit('answer_end', payload);
+    if (payload.status === 'failed')
+      this.server
+        .to(`session-${payload.sessionId}`)
+        .emit('answer_error', payload);
   }
 
   @SubscribeMessage('stop_generation')
-  handleStop(
-    @MessageBody() data: { sessionId: number },
+  async handleStop(
+    @MessageBody() data: unknown,
     @ConnectedSocket() socket: Socket,
   ) {
-    this.chatService.stopGeneration(data.sessionId);
-    this.generatingMap.set(data.sessionId, false);
-    this.server.to(`session-${data.sessionId}`).emit('generation_stopped', {
-      sessionId: data.sessionId,
-    });
+    if (!hasSessionId(data)) {
+      socket.emit('error', {
+        message: 'Session access denied or authentication expired',
+      });
+      return;
+    }
+    if (!(await this.authorizeSession(socket, data.sessionId))) return;
+    try {
+      const turnId = await this.turns.cancel(data.sessionId);
+      if (!turnId) return;
+      await this.chatService.stopGeneration(data.sessionId, turnId);
+      const job = await this.aiChatQueue.getJob(turnId);
+      if (!job || ['failed', 'completed'].includes(await job.getState())) {
+        await this.turns.release(data.sessionId, turnId);
+      }
+      if (
+        job &&
+        ['waiting', 'delayed', 'paused'].includes(await job.getState())
+      ) {
+        try {
+          await job.remove();
+          await this.turns.release(data.sessionId, turnId);
+        } catch {
+          // A worker may have claimed the job; it will observe cancellation.
+        }
+      }
+      if (this.generatingMap.get(data.sessionId) === turnId)
+        this.generatingMap.delete(data.sessionId);
+      this.server.to(`session-${data.sessionId}`).emit('generation_stopped', {
+        sessionId: data.sessionId,
+        turnId,
+      });
+    } catch {
+      socket.emit('error', {
+        code: 'CHAT_QUEUE_UNAVAILABLE',
+        message:
+          'Không thể xác nhận hủy lượt chat. Hãy kiểm tra lịch sử trước khi gửi lại.',
+      });
+    }
   }
 }

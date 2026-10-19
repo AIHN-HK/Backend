@@ -30,39 +30,58 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     // Prisma errors
     else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
-      status = HttpStatus.BAD_REQUEST;
-
       switch (exception.code) {
         case 'P2002':
-          body = { message: 'Dữ liệu đã tồn tại' };
+          status = HttpStatus.CONFLICT;
+          body = { code: 'DATA_CONFLICT', message: 'Dữ liệu đã tồn tại' };
           break;
         case 'P2003':
-          body = { message: 'Vi phạm khoá ngoại' };
+          status = HttpStatus.CONFLICT;
+          body = { code: 'RELATION_CONFLICT', message: 'Vi phạm khoá ngoại' };
           break;
         case 'P2025':
           status = HttpStatus.NOT_FOUND;
           body = { message: 'Không tìm thấy dữ liệu' };
           break;
+        case 'P2034':
+          status = HttpStatus.CONFLICT;
+          body = {
+            code: 'WRITE_CONFLICT',
+            message: 'Dữ liệu vừa thay đổi. Hãy tải lại trước khi lưu.',
+          };
+          break;
         default:
-          body = { message: 'Database error' };
+          body = { code: 'DATABASE_UNAVAILABLE', message: 'Database error' };
       }
     }
 
     // log level theo status
     if (status >= 500) {
       this.logger.error(
-        `${request.method} ${request.url}`,
-        exception instanceof Error ? exception.stack : '',
+        JSON.stringify({
+          event: 'request.failed',
+          method: request.method,
+          path: request.path,
+          requestId: (request as Request & { requestId?: string }).requestId,
+          errorType:
+            exception instanceof Error
+              ? exception.constructor.name
+              : 'UnknownError',
+          ...(exception instanceof Prisma.PrismaClientKnownRequestError
+            ? { databaseCode: exception.code }
+            : {}),
+        }),
       );
     } else if (status === 401 || status === 403) {
-      this.logger.warn(`${request.method} ${request.url}`);
+      this.logger.warn(`${request.method} ${request.path}`);
     }
 
     response.status(status).json({
       statusCode: status,
       timestamp: new Date().toISOString(),
-      path: request.url,
+      path: request.path,
       method: request.method,
+      requestId: (request as Request & { requestId?: string }).requestId,
       ...body,
     });
   }

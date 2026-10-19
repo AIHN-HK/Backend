@@ -153,6 +153,20 @@ model SampleTable {
   name String
 }
 
+model AdminAuditLog {
+  id        Int      @id @default(autoincrement())
+  actorId   Int
+  action    String
+  entity    String
+  targetId  String
+  before    Json
+  after     Json
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entity, targetId, createdAt])
+}
+
 model HollandCase {
   id          Int     @id @default(autoincrement())
   condition   String

@@ -83,7 +83,7 @@ jobs:
               --network host \
               -e "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
               $IMAGE_TAG \
-              npx prisma migrate status || echo "Migration check completed"
+              pnpm exec prisma migrate status || echo "Migration check completed"
 
             # Run database migrations BEFORE stopping old container
             echo "Running database migrations..."
@@ -91,7 +91,7 @@ jobs:
               --network host \
               -e "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
               $IMAGE_TAG \
-              npx prisma migrate deploy; then
+              pnpm exec prisma migrate deploy; then
               echo "❌ Migration failed! Deployment aborted. Old container still running."
               exit 1
             fi
@@ -126,6 +126,13 @@ jobs:
               -e "REDIS_HOST=${{ vars.REDIS_HOST }}" \
               -e "REDIS_PORT=${{ vars.REDIS_PORT }}" \
               -e "REDIS_PASSWORD=${{ vars.REDIS_PASSWORD }}" \
+              -e "AI_WS_URL=${{ vars.AI_WS_URL }}" \
+              -e "AI_CONNECT_TIMEOUT_MS=${{ vars.AI_CONNECT_TIMEOUT_MS || '10000' }}" \
+              -e "AI_IDLE_TIMEOUT_MS=${{ vars.AI_IDLE_TIMEOUT_MS || '30000' }}" \
+              -e "AI_MAX_DURATION_MS=${{ vars.AI_MAX_DURATION_MS || '120000' }}" \
+              -e "CHAT_TURN_LEASE_MS=${{ vars.CHAT_TURN_LEASE_MS || '600000' }}" \
+              -e "CORS_ORIGINS=${{ vars.CORS_ORIGINS }}" \
+              -e "TRUST_PROXY_HOPS=${{ vars.TRUST_PROXY_HOPS || '0' }}" \
               -e "ANSWER_V2_LOCK_TTL_MS=5000" \
               -e "ANSWER_V2_LOCK_WAIT_MS=800" \
               -e "ANSWER_V2_LOCK_POLL_MS=40" \

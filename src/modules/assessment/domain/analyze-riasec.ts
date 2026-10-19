@@ -3,7 +3,7 @@ import {
   RiasecScore,
   AnalyzeMeta,
   RiasecCode,
-} from '../constants/riasec.type';
+} from './riasec.types';
 
 const OPPOSITE_MAP: Record<RiasecCode, RiasecCode> = {
   R: 'S',

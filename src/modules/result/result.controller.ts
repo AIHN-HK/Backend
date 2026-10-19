@@ -10,8 +10,7 @@ import {
 import { ResultService } from './result.service';
 import { ResponseMessage } from 'src/core/decorators/response-message.decorator';
 import { TopCodeDto } from './dto/create_result.dto';
-import { ApiQuery } from '@nestjs/swagger/dist/decorators/api-query.decorator';
-import { ApiBearerAuth } from '@nestjs/swagger/dist/decorators/api-bearer.decorator';
+import { ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CurrentUser } from 'src/core/decorators/current-user.decorator';
 // import { createResultInput } from './dto/create_result.dto';
 

@@ -1,6 +1,8 @@
 import { Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsDefined,
   IsInt,
@@ -10,7 +12,7 @@ import {
   Validate,
   ValidateNested,
 } from 'class-validator';
-import { UniqueQuestionInAnswer } from 'src/core/decorators/UniqueQuestionInAnswer';
+import { UniqueQuestionInAnswer } from '../validators/unique-question.validator';
 // import { UniqueQuestionInAnswer } from 'src/core/decorators/UniqueQuestionInAnswer';
 
 export class AnswerDto {
@@ -26,13 +28,16 @@ export class AnswerDto {
   @IsInt()
   @Type(() => Number)
   @Min(0)
-  @Max(5)
+  @Max(1)
   answerValue: number;
 }
 export class SubmitAnswerDto {
   @IsNotEmpty()
   @IsInt()
+  @Min(1)
   attemptId: number;
+  @IsArray()
+  @ArrayMaxSize(1000)
   @ArrayNotEmpty()
   @IsNotEmpty()
   @ValidateNested({ each: true })
@@ -44,16 +49,19 @@ export class AnswerDtoV2 {
   @IsNotEmpty()
   @IsInt()
   @Type(() => Number)
+  @Min(1)
   questionId: number;
   @IsDefined()
   @IsBoolean()
-  @Type(() => Boolean)
   check: boolean;
 }
 export class SubmitAnswerDtoV2 {
   @IsNotEmpty()
   @IsInt()
+  @Min(1)
   attemptId: number;
+  @IsArray()
+  @ArrayMaxSize(1000)
   @ArrayNotEmpty()
   @IsNotEmpty()
   @ValidateNested({ each: true })

@@ -3,13 +3,16 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from 'class-validator';
-import { AnswerDto } from 'src/modules/answer/dto/create_answer.dto';
 
 @ValidatorConstraint({ async: false })
 export class UniqueQuestionInAnswer implements ValidatorConstraintInterface {
-  validate(value: AnswerDto[], validationArguments?: ValidationArguments) {
+  validate(value: unknown) {
     if (!Array.isArray(value)) return false;
-    const questionIds = value.map((answer) => answer.questionId);
+    if (value.some((answer) => !answer || typeof answer !== 'object'))
+      return false;
+    const questionIds = value.map(
+      (answer) => (answer as { questionId?: unknown }).questionId,
+    );
     const uniqueQuestionIds = new Set(questionIds);
     return questionIds.length === uniqueQuestionIds.size;
   }

@@ -1,3 +1,4 @@
+import { Matches, MaxLength } from 'class-validator';
 import {
   IsEmail,
   IsString,
@@ -13,6 +14,7 @@ export class RegisterDto {
   @IsNotEmpty()
   @IsString()
   @MinLength(8)
+  @MaxLength(72)
   password: string;
   @IsNotEmpty()
   @IsString()
@@ -24,5 +26,6 @@ export class RegisterDto {
   phone: string;
   @IsNotEmpty()
   @IsString()
+  @Matches(/^\d{6}$/)
   otpCode: string;
 }

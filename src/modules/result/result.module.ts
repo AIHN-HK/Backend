@@ -3,8 +3,8 @@ import { ResultController } from './result.controller';
 import { ResultService } from './result.service';
 import { ResultRepository } from './result.repository';
 
-import { AttemptModule } from '../attempt/attempt.module';
-import { ScoreCalculatorService } from 'src/core/services/score-calculator.services';
+import { AttemptModule } from '../attempt';
+import { ScoreCalculatorService } from '../assessment';
 
 @Module({
   controllers: [ResultController],

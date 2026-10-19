@@ -57,6 +57,7 @@ export class AttemptRepository {
       where: {
         userId,
         finishAt: { not: null },
+        result: { isNot: null },
         ...(cursorCreatedAt &&
           cursorId && {
             OR: [

@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Param, Req } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { ResponseMessage } from 'src/core/decorators/response-message.decorator';
 
@@ -19,7 +19,10 @@ export class ChatController {
     return this.chatService.getSessionsChatByUser(Number(userId));
   }
   @Get('sessions/:sessionId/messages')
-  async getMessages(@Param('sessionId') sessionId: string) {
-    return this.chatService.getMessage(Number(sessionId));
+  async getMessages(
+    @Param('sessionId') sessionId: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.chatService.getMessage(Number(sessionId), req.user.id);
   }
 }
