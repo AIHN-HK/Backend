@@ -1,6 +1,7 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/core/database/prisma.service';
+import { checkOtpProof, otpDigest } from './otp-proof';
 import { OtpType } from 'src/core/types/otp.type';
 
 @Injectable()
@@ -25,7 +26,11 @@ export class OtpRepository {
             where: { email: data.email, type: data.type },
           });
           return tx.otp.create({
-            data: { ...data, expiresAt: new Date(Date.now() + 600000) },
+            data: {
+              ...data,
+              code: otpDigest(data.email, data.code, data.type),
+              expiresAt: new Date(Date.now() + 600000),
+            },
           });
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -54,15 +59,18 @@ export class OtpRepository {
     return this.prismaService.otp.create({
       data: {
         email: data.email,
-        code: data.code,
+        code: otpDigest(data.email, data.code, data.type),
         type: data.type,
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       },
     });
   }
+  verifyProof(email: string, code: string, type: OtpType) {
+    return checkOtpProof(this.prismaService, email, code, type);
+  }
   async findFirst(email: string, code: string, type: OtpType) {
     return this.prismaService.otp.findFirst({
-      where: { email, code, type },
+      where: { email, code: otpDigest(email, code, type), type },
     });
   }
   async updateOtp(id: number) {

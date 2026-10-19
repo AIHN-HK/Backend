@@ -16,7 +16,7 @@ model User {
   yob           DateTime
   phone         String?
   createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @default(now())
+  updatedAt     DateTime       @default(now()) @updatedAt
   address       String?
   gender        String?
   class         Int?
@@ -31,8 +31,12 @@ model Otp {
   type      OtpType
   expiresAt DateTime
   used      Boolean  @default(false)
+  failedAttempts Int @default(0)
   createdAt DateTime @default(now())
   id        Int      @id @default(autoincrement())
+
+  @@unique([email, type])
+  @@index([expiresAt])
 }
 
 model RefreshToken {
@@ -133,7 +137,7 @@ model SnapShot {
 
 model Priority {
   id       Int    @id @default(autoincrement())
-  type     String
+  type     String @unique
   priority Int
 }
 

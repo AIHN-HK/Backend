@@ -1,3 +1,5 @@
+import { otpDigest } from '../src/modules/otp/otp-proof';
+process.env.OTP_HASH_SECRET = 'auth-transaction-test-only';
 import { AuthRepository } from '../src/modules/auth/auth.repository';
 import { OtpType } from '../src/core/types/otp.type';
 import { OtpRepository } from '../src/modules/otp/otp.repository';
@@ -10,7 +12,8 @@ function database() {
       {
         id: 1,
         email: 'a@example.test',
-        code: '123456',
+        code: otpDigest('a@example.test', '123456', OtpType.REGISTER),
+        failedAttempts: 0,
         type: OtpType.REGISTER,
         used: false,
         expiresAt: new Date(Date.now() + 600000),
@@ -25,16 +28,22 @@ function database() {
   let tail = Promise.resolve();
   const client = (s: any) => ({
     otp: {
-      updateMany: async ({ where }: any) => {
+      updateMany: async ({ where, data }: any) => {
         const rows = s.otp.filter(
           (o: any) =>
-            o.email === where.email &&
-            o.code === where.code &&
-            o.type === where.type &&
+            (where.id === undefined || o.id === where.id) &&
+            (where.email === undefined || o.email === where.email) &&
+            (where.code === undefined || o.code === where.code) &&
+            (where.type === undefined || o.type === where.type) &&
             !o.used &&
-            o.expiresAt > where.expiresAt.gt,
+            o.expiresAt > where.expiresAt.gt &&
+            (!where.failedAttempts ||
+              o.failedAttempts < where.failedAttempts.lt),
         );
-        rows.forEach((o: any) => (o.used = true));
+        rows.forEach((o: any) => {
+          if (data.used) o.used = true;
+          if (data.failedAttempts) o.failedAttempts++;
+        });
         return { count: rows.length };
       },
       findFirst: async ({ where }: any) =>
@@ -80,6 +89,10 @@ function database() {
     },
   });
   const db: any = {
+    otp: {
+      findFirst: (arg: any) => client(state).otp.findFirst(arg),
+      updateMany: (arg: any) => client(state).otp.updateMany(arg),
+    },
     $transaction: (fn: any) => {
       const run = tail.then(async () => {
         const next = structuredClone(state);
@@ -118,6 +131,11 @@ describe('atomic auth writes', () => {
   it('reset consumes OTP and revokes refresh in the same transaction', async () => {
     const d = database();
     d.state().otp[0].type = OtpType.FORGOT_PASSWORD;
+    d.state().otp[0].code = otpDigest(
+      'a@example.test',
+      '123456',
+      OtpType.FORGOT_PASSWORD,
+    );
     d.state().users = [{ id: 1, password: 'old' }];
     const r: any = new AuthRepository(d.db);
     await r.resetPasswordWithOtp(1, 'a@example.test', '123456', 'new-hash');
@@ -127,6 +145,25 @@ describe('atomic auth writes', () => {
       r.resetPasswordWithOtp(1, 'a@example.test', '123456', 'other'),
     ).rejects.toMatchObject({ status: 401 });
     expect(d.state().users[0].password).toBe('new-hash');
+  });
+  it('caps guesses across callers and keeps failures committed', async () => {
+    const d = database();
+    const r = new AuthRepository(d.db);
+    const input = {
+      email: 'a@example.test',
+      password: 'hash',
+      fullname: 'Test',
+      yob: new Date('2009-01-01'),
+    };
+    const outcomes = await Promise.allSettled(
+      Array.from({ length: 8 }, () => r.registerWithOtp(input, '000000')),
+    );
+    expect(outcomes.every((x) => x.status === 'rejected')).toBe(true);
+    expect(d.state().otp[0].failedAttempts).toBe(5);
+    await expect(r.registerWithOtp(input, '123456')).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(d.state().users).toHaveLength(0);
   });
   it('exact refresh token can be rotated once even with concurrent requests', async () => {
     const d = database();
@@ -155,6 +192,8 @@ describe('atomic auth writes', () => {
         type: OtpType.REGISTER,
       }),
     ).rejects.toMatchObject({ status: 429 });
-    expect(d.state().otp[0].code).toBe('123456');
+    expect(d.state().otp[0].code).toBe(
+      otpDigest('a@example.test', '123456', OtpType.REGISTER),
+    );
   });
 });

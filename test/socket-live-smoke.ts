@@ -58,7 +58,7 @@ async function main() {
     await prisma.attempt.create({
       data: {
         userId: users[0].id,
-        totalQuestions: 0,
+        totalQuestions: 1,
         finishAt: new Date(),
         result: {
           create: {

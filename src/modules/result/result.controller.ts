@@ -5,6 +5,7 @@ import {
   HttpStatus,
   Param,
   Query,
+  ParseIntPipe,
 } from '@nestjs/common';
 
 import { ResultService } from './result.service';
@@ -32,34 +33,31 @@ export class ResultController {
   @ResponseMessage('Results retrieved successfully')
   @Get(':attemptId')
   async getResults(
-    @Param('attemptId') attemptId: string,
+    @Param('attemptId', ParseIntPipe) attemptId: number,
     @CurrentUser('id') userId: number,
   ) {
-    return this.resultService.getResultRanking(
-      Number.parseInt(attemptId),
-      userId,
-    );
+    return this.resultService.getResultRanking(attemptId, userId);
   }
   @ApiBearerAuth('JWT-auth')
   @HttpCode(HttpStatus.OK)
   @ResponseMessage('history results retrieved successfully')
   @Get('attempt/snapshots/:attemptId')
   async getAllResultsByAttemptId(
-    @Param('attemptId') attemptId: string,
+    @Param('attemptId', ParseIntPipe) attemptId: number,
     @CurrentUser('id') userId: number,
   ) {
-    return this.resultService.Getsnapshot(Number.parseInt(attemptId), userId);
+    return this.resultService.Getsnapshot(attemptId, userId);
   }
   @ApiBearerAuth('JWT-auth')
   @HttpCode(HttpStatus.OK)
   @ResponseMessage('Analyze top result fetched successfully')
   @Get('analyze-result/:attemptId')
   async analyzeResult(
-    @Param('attemptId') attemptId: string,
+    @Param('attemptId', ParseIntPipe) attemptId: number,
     @CurrentUser('id') userId: number,
   ) {
     return await this.resultService.getAnalyzeResultsByAttemptId(
-      Number.parseInt(attemptId),
+      attemptId,
       userId,
     );
   }

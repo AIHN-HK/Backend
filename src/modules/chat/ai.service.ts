@@ -142,6 +142,10 @@ export class AiService implements OnModuleDestroy {
             }
             data.onToken(payload.content);
           } else if (payload.type === 'end') {
+            if (!receivedLength) {
+              fail('AI_PROTOCOL_ERROR', 'AI returned an empty answer.');
+              return;
+            }
             finish('completed');
           } else if (payload.type === 'error') {
             fail('AI_REMOTE_ERROR', 'AI could not complete this turn.');

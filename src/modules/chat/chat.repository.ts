@@ -96,7 +96,7 @@ export class ChatRepository {
       where: {
         sessionId,
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
   }
   findSession(sessionId: number) {
@@ -121,8 +121,8 @@ export class ChatRepository {
   }
   async pendingHistory(sessionId: number) {
     return this.prisma.chatMessage.findMany({
-      where: { sessionId, checkpoint: 0 },
-      orderBy: { createdAt: 'asc' },
+      where: { sessionId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: 201,
       select: { id: true, role: true, content: true },
     });

@@ -1,3 +1,5 @@
+import { otpDigest } from '../src/modules/otp/otp-proof';
+process.env.OTP_HASH_SECRET = 'auth-security-test-only';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { TokenService } from '../src/core/services/token.service';
 import { ConfigService } from '@nestjs/config';
@@ -87,7 +89,14 @@ describe('OTP validation and resend', () => {
       { used: true, expiresAt: new Date(Date.now() + 10000) },
       { used: false, expiresAt: new Date(0) },
     ]) {
-      const service = new OtpService({ findFirst: async () => row } as any);
+      const service = new OtpService({
+        verifyProof: async () => {
+          throw Object.assign(new Error('Invalid or expired OTP'), {
+            status: 401,
+            cause: row,
+          });
+        },
+      } as any);
       await expect(
         service.verifyOtpCode({
           email: 'a@example.test',
@@ -113,6 +122,10 @@ describe('OTP validation and resend', () => {
       code: '123456',
       type: OtpType.REGISTER,
     });
+    expect(data.code).toBe(
+      otpDigest('a@example.test', '123456', OtpType.REGISTER),
+    );
+    expect(data.code).not.toBe('123456');
     expect(data.expiresAt.getTime() - start).toBeGreaterThanOrEqual(599900);
     expect(data.expiresAt.getTime() - start).toBeLessThanOrEqual(600100);
   });

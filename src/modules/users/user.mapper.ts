@@ -1,3 +1,4 @@
+import { calculateAge } from '../../core/utils/age';
 import { User } from '@prisma/client';
 import { UserProfileResponseDto } from './dto/user-response';
 import { Gender } from './dto/update-user.dto';
@@ -26,12 +27,9 @@ function profileGender(value: string | null): Gender | null {
 }
 
 export function mapUserToProfileDto(user: User): UserProfileResponseDto {
-  const currentYear = new Date().getFullYear();
-  const yob = new Date(user.yob).getFullYear();
-
   return {
     fullname: user.fullname,
-    age: currentYear - yob,
+    age: calculateAge(new Date(user.yob)),
     phone: user.phone,
     address: user.address,
     gender: profileGender(user.gender),

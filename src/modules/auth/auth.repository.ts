@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { Prisma, OtpType } from '@prisma/client';
+import { checkOtpProof, otpDigest } from '../otp';
 import { PrismaService } from '../../core/database/prisma.service';
 
 @Injectable()
@@ -11,18 +12,32 @@ export class AuthRepository {
     email: string,
     code: string,
     type: OtpType,
+    id: number,
   ) {
     const result = await tx.otp.updateMany({
-      where: { email, code, type, used: false, expiresAt: { gt: new Date() } },
+      where: {
+        id,
+        email,
+        code: otpDigest(email, code, type),
+        type,
+        used: false,
+        expiresAt: { gt: new Date() },
+      },
       data: { used: true },
     });
     if (result.count !== 1)
       throw new UnauthorizedException('Invalid or expired OTP');
   }
 
-  registerWithOtp(data: Prisma.UserCreateInput, code: string) {
+  async registerWithOtp(data: Prisma.UserCreateInput, code: string) {
+    const id = await checkOtpProof(
+      this.prisma,
+      data.email,
+      code,
+      OtpType.REGISTER,
+    );
     return this.prisma.$transaction(async (tx) => {
-      await this.consumeOtp(tx, data.email, code, OtpType.REGISTER);
+      await this.consumeOtp(tx, data.email, code, OtpType.REGISTER, id);
       return tx.user.create({
         data: { ...data, role: 'USER' },
         select: { id: true, email: true, fullname: true },
@@ -30,14 +45,20 @@ export class AuthRepository {
     });
   }
 
-  resetPasswordWithOtp(
+  async resetPasswordWithOtp(
     id: number,
     email: string,
     code: string,
     password: string,
   ) {
+    const otpId = await checkOtpProof(
+      this.prisma,
+      email,
+      code,
+      OtpType.FORGOT_PASSWORD,
+    );
     return this.prisma.$transaction(async (tx) => {
-      await this.consumeOtp(tx, email, code, OtpType.FORGOT_PASSWORD);
+      await this.consumeOtp(tx, email, code, OtpType.FORGOT_PASSWORD, otpId);
       await tx.user.update({ where: { id }, data: { password } });
       await tx.refreshToken.deleteMany({ where: { userId: id } });
       return { id, email };

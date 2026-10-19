@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: backend_api
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -46,6 +46,17 @@ services:
       LOG_LEVEL: info
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      AI_WS_URL: ${AI_WS_URL:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      OTP_HASH_SECRET: ${OTP_HASH_SECRET:-}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASS: ${MAIL_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+    volumes:
+      - avatar_data:/app/storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,3 +66,4 @@ services:
 
 volumes:
   postgres_data:
+  avatar_data:

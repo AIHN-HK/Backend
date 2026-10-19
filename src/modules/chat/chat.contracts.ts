@@ -44,7 +44,7 @@ export interface ChatProfile {
     experience: string | null;
   };
   career_orientation: {
-    has_chosen: boolean;
+    has_chosen: boolean | null;
     considering_careers: string[] | null;
     target_schools: string[];
     important_factors: string[];
@@ -53,7 +53,7 @@ export interface ChatProfile {
     father_job: string | null;
     mother_job: string | null;
     family_expectations: string | null;
-    has_guidance: boolean;
+    has_guidance: boolean | null;
     guidance_content: string | null;
   };
 }

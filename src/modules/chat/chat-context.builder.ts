@@ -1,3 +1,4 @@
+import { calculateAge } from '../../core/utils/age';
 import { Inject, Injectable } from '@nestjs/common';
 import { ChatSession } from '@prisma/client';
 import { ResultService } from '../result';
@@ -25,7 +26,7 @@ export class ChatContextBuilder {
     );
     const basic_info = {
       full_name: user.fullname,
-      age: new Date().getFullYear() - user.yob.getFullYear(),
+      age: calculateAge(user.yob),
       address: user.address,
       status: 'STUDENT',
     };
@@ -39,7 +40,7 @@ export class ChatContextBuilder {
         experience: null,
       },
       career_orientation: {
-        has_chosen: false,
+        has_chosen: null,
         considering_careers: null,
         target_schools: [],
         important_factors: [],
@@ -48,7 +49,7 @@ export class ChatContextBuilder {
         father_job: null,
         mother_job: null,
         family_expectations: null,
-        has_guidance: false,
+        has_guidance: null,
         guidance_content: null,
       },
     };

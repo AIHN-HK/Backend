@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -87,6 +88,8 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto) {
+    if (new Date(registerDto.yob) > new Date())
+      throw new BadRequestException('Date of birth must not be in the future');
     const existingUser = await this.usersRepository.findByEmail(
       registerDto.email,
     );

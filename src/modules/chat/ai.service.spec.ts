@@ -59,6 +59,7 @@ describe('AI stream lifecycle', () => {
   });
 
   it.each([
+    ['message', '{"type":"end"}', 'AI_PROTOCOL_ERROR'],
     ['close', undefined, 'AI_CONNECTION_CLOSED'],
     ['message', 'not-json', 'AI_PROTOCOL_ERROR'],
     ['message', '{"type":"token","content":false}', 'AI_PROTOCOL_ERROR'],

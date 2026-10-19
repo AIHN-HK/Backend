@@ -25,7 +25,7 @@ describe('built AppModule HTTP contract with isolated DB/Redis', () => {
       userId: owners[0].id,
     });
     const attempt = await fixture.prisma.attempt.create({
-      data: { userId: owners[1].id, totalQuestions: 0 },
+      data: { userId: owners[1].id, totalQuestions: 1 },
     });
     otherSession = (
       await fixture.prisma.chatSession.create({

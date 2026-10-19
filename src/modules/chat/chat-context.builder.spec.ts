@@ -1,3 +1,4 @@
+import { ChatRepository } from './chat.repository';
 import { ChatContextBuilder } from './chat-context.builder';
 
 describe('bounded pending AI context', () => {
@@ -43,4 +44,19 @@ describe('bounded pending AI context', () => {
     );
     expect(await builder.pendingHistory(9)).toEqual(rows);
   });
+});
+
+it('sends checkpointed exchanges as conversation memory in stable order', async () => {
+  const findMany = jest
+    .fn()
+    .mockResolvedValue([
+      { id: 1, role: 'assistant', content: 'previous answer' },
+    ]);
+  const repository = new ChatRepository({ chatMessage: { findMany } } as never);
+  expect(await repository.pendingHistory(9)).toHaveLength(1);
+  expect(findMany.mock.calls[0][0].where).toEqual({ sessionId: 9 });
+  expect(findMany.mock.calls[0][0].orderBy).toEqual([
+    { createdAt: 'asc' },
+    { id: 'asc' },
+  ]);
 });

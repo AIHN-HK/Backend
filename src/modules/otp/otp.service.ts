@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
 import { CreateOtpDto } from './dto/createOtpDto';
 import { verifyOtpCode } from './dto/verifyOtpDto';
@@ -21,21 +21,7 @@ export class OtpService {
     return otpCode;
   }
   async verifyOtpCode(data: verifyOtpCode) {
-    const otp = await this.otpRepository.findFirst(
-      data.email,
-      data.code,
-      data.type,
-    );
-    if (!otp) {
-      throw new UnauthorizedException('Invalid OTP code');
-    }
-    if (otp.used) {
-      throw new UnauthorizedException('OTP code has already been used');
-    }
-    if (new Date(otp.expiresAt) <= new Date()) {
-      throw new UnauthorizedException('OTP code has expired');
-    }
-
+    await this.otpRepository.verifyProof(data.email, data.code, data.type);
     return true;
   }
 }
