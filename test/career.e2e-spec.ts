@@ -209,6 +209,124 @@ describe('career journey against migrated PostgreSQL, Redis, Bull and local AI p
       .send({ attemptId })
       .expect(404);
   });
+  it('derives gaps, creates an owned phased roadmap and preserves evidence on regeneration', async () => {
+    const gap = await request(fixture.origin)
+      .get('/api/v1/career/gaps/15-1252.00')
+      .auth(access, { type: 'bearer' })
+      .expect(200);
+    expect(
+      gap.body.data.gaps.some((g: any) => g.current === null && g.gap === null),
+    ).toBe(true);
+    const response = await request(fixture.origin)
+      .post('/api/v1/career/goals')
+      .auth(access, { type: 'bearer' })
+      .send({ careerId: '15-1252.00' })
+      .expect(201);
+    let goal = response.body.data;
+    await request(fixture.origin)
+      .post('/api/v1/career/goals')
+      .auth(access, { type: 'bearer' })
+      .send({ careerId: '15-1252.00' })
+      .expect(409);
+    const later = goal.tasks.find((t: any) => t.phase === 3);
+    await request(fixture.origin)
+      .patch(`/api/v1/career/goals/${goal.id}/tasks/${later.id}`)
+      .auth(access, { type: 'bearer' })
+      .send({ revision: goal.revision, done: true, evidence: 'premature' })
+      .expect(409);
+    const first = goal.tasks[0];
+    await request(fixture.origin)
+      .patch(`/api/v1/career/goals/${goal.id}/tasks/${first.id}`)
+      .auth(otherAccess, { type: 'bearer' })
+      .send({ revision: goal.revision, done: true, evidence: 'wrong owner' })
+      .expect(404);
+    const updated = await request(fixture.origin)
+      .patch(`/api/v1/career/goals/${goal.id}/tasks/${first.id}`)
+      .auth(access, { type: 'bearer' })
+      .send({
+        revision: goal.revision,
+        done: true,
+        evidence: 'Read work activities and recorded reflections',
+      })
+      .expect(200);
+    await request(fixture.origin)
+      .patch(`/api/v1/career/goals/${goal.id}/tasks/${first.id}`)
+      .auth(access, { type: 'bearer' })
+      .send({ revision: goal.revision, done: false, evidence: '' })
+      .expect(409);
+    goal = updated.body.data;
+    const regenerated = await request(fixture.origin)
+      .post(`/api/v1/career/goals/${goal.id}/regenerate`)
+      .auth(access, { type: 'bearer' })
+      .send({ revision: goal.revision })
+      .expect(201);
+    expect(
+      regenerated.body.data.tasks.find((t: any) => t.id === first.id),
+    ).toMatchObject({
+      done: true,
+      evidence: 'Read work activities and recorded reflections',
+    });
+    const other = await request(fixture.origin)
+      .get('/api/v1/career/goals')
+      .auth(otherAccess, { type: 'bearer' })
+      .expect(200);
+    expect(other.body.data).toEqual([]);
+  });
+  it('reports real analytics and enforces DB-authoritative admin publishing with audit', async () => {
+    const analytics = await request(fixture.origin)
+      .get('/api/v1/career/analytics')
+      .auth(access, { type: 'bearer' })
+      .expect(200);
+    expect(analytics.body.data.counts.assessments).toBe(1);
+    expect(analytics.body.data.delta).toBeNull();
+    expect(analytics.body.data.goals[0].completed).toBe(1);
+    await request(fixture.origin)
+      .get('/api/v1/admin/career-analytics')
+      .auth(access, { type: 'bearer' })
+      .expect(403);
+    const admin = await fixture.prisma.user.create({
+      data: {
+        email: 'admin-career@example.test',
+        fullname: 'Admin fixture',
+        role: 'ADMIN',
+        password: 'unused',
+        yob: new Date('2000-01-01'),
+      },
+    });
+    const adminToken = new JwtService({ secret: fixture.secret }).sign({
+      userId: admin.id,
+    });
+    const detail = await request(fixture.origin)
+      .get('/api/v1/careers/15-1252.00')
+      .expect(200);
+    const revision = detail.body.data.revision;
+    await request(fixture.origin)
+      .patch('/api/v1/admin/career-data/15-1252.00')
+      .auth(adminToken, { type: 'bearer' })
+      .send({ revision, active: false })
+      .expect(200);
+    await request(fixture.origin).get('/api/v1/careers/15-1252.00').expect(404);
+    const saved = await request(fixture.origin)
+      .get(`/api/v1/career/recommendations/${runId}`)
+      .auth(access, { type: 'bearer' })
+      .expect(200);
+    expect(saved.body.data.items.length).toBe(20);
+    expect(
+      await fixture.prisma.adminAuditLog.count({
+        where: { actorId: admin.id, entity: 'Career' },
+      }),
+    ).toBe(1);
+    await request(fixture.origin)
+      .patch('/api/v1/admin/career-data/15-1252.00')
+      .auth(adminToken, { type: 'bearer' })
+      .send({ revision: revision + 1, active: true })
+      .expect(200);
+    const stats = await request(fixture.origin)
+      .get('/api/v1/admin/career-analytics')
+      .auth(adminToken, { type: 'bearer' })
+      .expect(200);
+    expect(stats.body.data.careers).toBe(923);
+  });
   it('preserves conversation memory through two Socket.IO/Bull/AI turns and saved history', async () => {
     socket = io(fixture.origin, {
       auth: { token: access },
@@ -248,6 +366,15 @@ describe('career journey against migrated PostgreSQL, Redis, Bull and local AI p
     ).toBe(true);
     expect(JSON.stringify(contexts)).not.toMatch(
       /Fixture-password|accessToken|refreshToken|journey@example/,
+    );
+    expect(contexts[1].profile_json.career_context.target.id).toBe(
+      '15-1252.00',
+    );
+    expect(contexts[1].profile_json.career_context.recommendation.id).toBe(
+      runId,
+    );
+    expect(contexts[1].profile_json.career_context.roadmaps[0].completed).toBe(
+      1,
     );
     const history = await request(fixture.origin)
       .get(`/api/v1/chat/sessions/${session.sessionId}/messages`)

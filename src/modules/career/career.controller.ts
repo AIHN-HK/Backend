@@ -13,11 +13,15 @@ import { Public } from '../../core/decorators/public.decorator';
 import { Roles } from '../../core/decorators/roles.decorator';
 import { UserRole } from '../../core/types/user.type';
 import { CareerService } from './career.service';
+import { CareerProgressService } from './career-progress.service';
 import {
   CareerProfileInput,
   CareerQuery,
   CreateRecommendationInput,
   PublishCareerInput,
+  CreateGoalInput,
+  UpdateGoalTaskInput,
+  GoalRevisionInput,
 } from './career.dto';
 
 @Controller('careers')
@@ -77,5 +81,58 @@ export class AdminCareerController {
     @Body() body: PublishCareerInput,
   ) {
     return this.service.publish(id, body.revision, body.active, owner);
+  }
+}
+
+@Controller('career')
+export class CareerProgressController {
+  constructor(private readonly progress: CareerProgressService) {}
+  @Get('gaps/:careerId') gap(
+    @CurrentUser('id') owner: number,
+    @Param('careerId') id: string,
+  ) {
+    return this.progress.gap(owner, id);
+  }
+  @Get('goals') goals(@CurrentUser('id') owner: number) {
+    return this.progress.goals(owner);
+  }
+  @Post('goals') create(
+    @CurrentUser('id') owner: number,
+    @Body() body: CreateGoalInput,
+  ) {
+    return this.progress.create(owner, body.careerId);
+  }
+  @Patch('goals/:id/tasks/:taskId') update(
+    @CurrentUser('id') owner: number,
+    @Param('id') id: string,
+    @Param('taskId') taskId: string,
+    @Body() body: UpdateGoalTaskInput,
+  ) {
+    return this.progress.update(
+      owner,
+      id,
+      taskId,
+      body.revision,
+      body.done,
+      body.evidence,
+    );
+  }
+  @Post('goals/:id/regenerate') regenerate(
+    @CurrentUser('id') owner: number,
+    @Param('id') id: string,
+    @Body() body: GoalRevisionInput,
+  ) {
+    return this.progress.regenerate(owner, id, body.revision);
+  }
+  @Get('analytics') analytics(@CurrentUser('id') owner: number) {
+    return this.progress.analytics(owner);
+  }
+}
+@Controller('admin/career-analytics')
+@Roles(UserRole.ADMIN)
+export class AdminCareerAnalyticsController {
+  constructor(private readonly progress: CareerProgressService) {}
+  @Get() analytics() {
+    return this.progress.adminAnalytics();
   }
 }

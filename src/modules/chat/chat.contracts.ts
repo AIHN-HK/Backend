@@ -30,6 +30,7 @@ export type ChatEndEvent =
     };
 
 export interface ChatProfile {
+  career_context?: unknown;
   form_date: string;
   basic_info: {
     full_name: string;

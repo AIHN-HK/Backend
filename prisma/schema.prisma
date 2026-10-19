@@ -301,6 +301,8 @@ model GoalTask {
   evidence String @default("")
   done Boolean @default(false)
   position Int
+  phase Int @default(0)
+  kind String @default("practice")
   goal CareerGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
   @@index([goalId, position])
 }

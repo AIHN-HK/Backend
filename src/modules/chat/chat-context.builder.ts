@@ -1,6 +1,7 @@
 import { calculateAge } from '../../core/utils/age';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ChatSession } from '@prisma/client';
+import { CareerProgressService } from '../career';
 import { ResultService } from '../result';
 import { ChatRepository } from './chat.repository';
 import { ChatContext, ChatProfile } from './chat.contracts';
@@ -14,6 +15,7 @@ export class ChatContextBuilder {
       'readContextRecords' | 'pendingHistory'
     >,
     private readonly results: ResultService,
+    @Optional() private readonly careers?: CareerProgressService,
   ) {}
   async build(
     session: Pick<ChatSession, 'userId' | 'attemptId'>,
@@ -54,6 +56,10 @@ export class ChatContextBuilder {
       },
     };
 
+    if (this.careers)
+      profile_json.career_context = await this.careers.advisorContext(
+        session.userId,
+      );
     return { profile_json, test_json };
   }
   async pendingHistory(sessionId: number) {

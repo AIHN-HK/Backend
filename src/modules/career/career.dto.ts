@@ -65,3 +65,7 @@ export class UpdateGoalTaskInput {
   @MaxLength(1000)
   evidence: string;
 }
+
+export class GoalRevisionInput {
+  @IsInt() @Min(1) revision: number;
+}

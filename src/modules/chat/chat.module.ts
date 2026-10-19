@@ -1,3 +1,4 @@
+import { CareerModule } from '../career';
 import { Module } from '@nestjs/common';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
@@ -24,6 +25,7 @@ import { ChatContextBuilder } from './chat-context.builder';
   ],
   imports: [
     ResultModule,
+    CareerModule,
     AuthModule,
     BullModule.registerQueue({
       name: 'ai-chat-queue',
