@@ -7,11 +7,25 @@ export const configValidationSchema = Joi.object({
   PORT: Joi.number().default(3000),
   API_VERSION: Joi.string().default('v1'),
   DATABASE_URL: Joi.string().required(),
-  JWT_ACCESS_SECRET: Joi.string().required(),
-  OTP_HASH_SECRET: Joi.string().empty('').optional(),
-  JWT_REFRESH_SECRET: Joi.string().required(),
-  JWT_ACCESS_EXPIRATION: Joi.string().default('15m'),
-  JWT_REFRESH_EXPIRATION: Joi.string().default('7d'),
+  JWT_ACCESS_SECRET: Joi.string()
+    .when('NODE_ENV', { is: 'production', then: Joi.string().min(32) })
+    .required(),
+  OTP_HASH_SECRET: Joi.string()
+    .empty('')
+    .when('NODE_ENV', { is: 'production', then: Joi.string().min(32) })
+    .optional(),
+  JWT_REFRESH_SECRET: Joi.string()
+    .when('NODE_ENV', {
+      is: 'production',
+      then: Joi.string().min(32).invalid(Joi.ref('JWT_ACCESS_SECRET')),
+    })
+    .required(),
+  JWT_ACCESS_EXPIRATION: Joi.string()
+    .pattern(/^[1-9]\d{0,5}[smhd]$/)
+    .default('15m'),
+  JWT_REFRESH_EXPIRATION: Joi.string()
+    .pattern(/^[1-9]\d{0,5}[smhd]$/)
+    .default('7d'),
   REDIS_HOST: Joi.string().default('localhost'),
   REDIS_PORT: Joi.number().default(6379),
   REDIS_PASSWORD: Joi.string().allow('', null).optional(),
