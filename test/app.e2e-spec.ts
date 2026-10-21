@@ -60,6 +60,30 @@ describe('built AppModule HTTP contract with isolated DB/Redis', () => {
       .timeout(5000)
       .expect(401);
   });
+  it('reports a missing OTP migration as not ready even when PostgreSQL is reachable', async () => {
+    await fixture.prisma.$executeRawUnsafe(
+      'ALTER TABLE "Otp" RENAME COLUMN "failedAttempts" TO "fixture_missing_attempts"',
+    );
+    try {
+      const response = await request(fixture.origin)
+        .get('/api/v1/health/ready')
+        .timeout(5000)
+        .expect(503);
+      expect(response.body.code).toBe('NOT_READY');
+      expect(response.body.checks).toEqual({ database: false, redis: true });
+      expect(await fixture.prisma.$queryRaw`SELECT 1 AS reachable`).toEqual([
+        { reachable: 1 },
+      ]);
+    } finally {
+      await fixture.prisma.$executeRawUnsafe(
+        'ALTER TABLE "Otp" RENAME COLUMN "fixture_missing_attempts" TO "failedAttempts"',
+      );
+    }
+    await request(fixture.origin)
+      .get('/api/v1/health/ready')
+      .timeout(5000)
+      .expect(200);
+  });
   it('rejects malformed input before persistence', async () => {
     const response = await request(fixture.origin)
       .post('/api/v1/answer/submit-v2')

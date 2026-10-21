@@ -16,13 +16,26 @@ The live runner has a 180s abort deadline, bounded HTTP/migration waits, and att
 
 ## Quick Start
 
+Create an ignored `.env` from `.env.example` if it does not already exist. Check
+`DATABASE_URL`, start PostgreSQL/Redis, and configure SMTP before trying registration.
+Create `aihn_dev` only for a new local installation; keep an existing database.
+
 ```bash
 pnpm install --frozen-lockfile
-createdb aihn_dev
-pnpm exec prisma generate
-pnpm exec prisma migrate deploy
+pnpm run setup:dev
 pnpm run start:dev
 ```
+
+`setup:dev` generates Prisma, applies pending migrations to the selected database,
+and imports the versioned career catalog. It preserves accounts, assessment history,
+and existing career publication states. The OTP hardening migration invalidates
+old short-lived OTPs; request a new code afterward. Do not use `prisma db push` or
+reset the database to repair a migration mismatch. `/api/v1/health/ready` checks
+required application tables/columns as well as the database connection and Redis.
+
+For a newly created, empty development DB, initialize the Holland question bank,
+group descriptions and priorities with `pnpm run seed:dev` before taking a test.
+This is a separate initial-data step, not part of the normal startup command.
 
 ## URLs
 
@@ -42,6 +55,7 @@ pnpm run start:dev
 
 ```bash
 pnpm run start:dev       # Development
+pnpm run setup:dev       # Apply schema and import career data into the selected dev DB
 pnpm run build           # Build
 pnpm exec prisma studio       # Database GUI
 pnpm exec prisma migrate dev  # Migrations
@@ -82,7 +96,8 @@ TRUST_PROXY_HOPS=0
 Redis locks and Bull require Redis; optional read caches fall back to PostgreSQL.
 HTTP and Socket.IO use the configured origin list; production without a list
 does not enable cross-origin access. Set trusted proxy hops for your deployment.
-`GET /api/v1/health` is liveness; `/health/ready` checks PostgreSQL and Redis with a timeout.
+`GET /api/v1/health` is liveness; `/health/ready` checks PostgreSQL application
+tables/columns and Redis with a timeout. A reachable but outdated DB is not ready.
 
 Apply migrations before running this version: `AdminAuditLog` is required by
 authenticated admin mutations. Audit and the associated mutation commit together.
@@ -104,9 +119,12 @@ crash marks the uncertain job failed rather than contacting AI again. Cancelling
 and preserves pending history. Queue/gateway run in the same Nest process; this change
 does not configure a Socket.IO adapter for a separate multi-process worker topology.
 
-The legacy `test/app.e2e-spec.ts` still expects Hello World at `/`; it is preserved
-and is not part of `check`. The live smoke exercises the actual AppModule and built
-entrypoint. Browser profile smoke remains optional and requires its frontend tooling.
+`test/app.e2e-spec.ts` exercises the built app and includes a missing-OTP-column
+readiness regression against an isolated database. `pnpm run test:web:browser`
+requires sibling `Frontend` dependencies and Playwright Chromium. It exercises real
+registration/SMTP OTP, password recovery/reset, login, the 108-question flow, and
+user/admin screens at four viewport widths. Its SMTP capture is local; it sends no
+external email. The runner stores screenshots and a JSON audit in its UUID directory.
 
 ## Project Structure
 
@@ -122,10 +140,16 @@ src/
 
 ### Register
 
+Use your own email address in both requests. Read the six-digit code from its inbox.
+
 ```bash
+curl -X POST http://localhost:3000/api/v1/auth/register/send-otp \
+  -H "Content-Type: application/json" \
+  -d '{"email":"your-address@example.com"}'
+
 curl -X POST http://localhost:3000/api/v1/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123"}'
+  -d '{"email":"your-address@example.com","password":"replace-this-password","fullname":"Your name","phone":"0901234567","yob":"2008-01-01","otpCode":"REPLACE_WITH_6_DIGIT_CODE"}'
 ```
 
 ### Login
