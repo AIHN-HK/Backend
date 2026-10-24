@@ -40,7 +40,8 @@
     "career:import": "ts-node -r dotenv/config scripts/import-career-data.ts",
     "career:evaluate": "ts-node scripts/evaluate-career-ranking.ts",
     "test:career:browser": "pnpm run build && ts-node -r tsconfig-paths/register test/career-browser-live-smoke.ts",
-    "test:web:browser": "pnpm run build && ts-node -r tsconfig-paths/register test/web-browser-live-smoke.ts"
+    "test:web:browser": "pnpm run build && ts-node -r tsconfig-paths/register test/web-browser-live-smoke.ts",
+    "test:guest:browser": "pnpm run build && ts-node -r tsconfig-paths/register test/guest-assessment-live-smoke.ts"
   },
   "prisma": {
     "seed": "node dist/prisma/seed.js"
