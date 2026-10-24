@@ -29,6 +29,7 @@ import { redisOptions } from './core/config/redis.options';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { CareerModule } from './modules/career';
 import { AdminModule } from './modules/admin';
+import { GuestAssessmentModule } from './modules/guest-assessment';
 @Module({
   imports: [
     ThrottlerModule.forRoot([
@@ -43,6 +44,7 @@ import { AdminModule } from './modules/admin';
     AuthModule,
     AdminModule,
     CareerModule,
+    GuestAssessmentModule,
     // UsersModule,
     HealthModule,
     QuestionModule,

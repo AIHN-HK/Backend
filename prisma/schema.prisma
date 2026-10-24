@@ -26,6 +26,7 @@ model User {
   careerProfile CareerProfile?
   recommendations RecommendationRun[]
   careerGoals CareerGoal[]
+  guestAssessmentClaims GuestAssessmentClaim[]
 }
 
 model Otp {
@@ -74,8 +75,21 @@ model Attempt {
   result         Result?
   snapshots      SnapShot?
   recommendations RecommendationRun[]
+  guestClaim GuestAssessmentClaim?
 
   @@index([userId, finishAt, createdAt, id])
+}
+
+model GuestAssessmentClaim {
+  id        String   @id
+  digest    String
+  userId    Int
+  attemptId Int      @unique
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempt   Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Answer {
