@@ -6,6 +6,8 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  ForbiddenException,
+  ParseIntPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -57,7 +59,12 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'User retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async findOne(@Param('id') id: string) {
-    return this.usersService.findById(Number.parseInt(id));
+  async findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('id') userId: number,
+  ) {
+    if (id !== userId)
+      throw new ForbiddenException('Only your own profile is accessible');
+    return this.usersService.findById(userId);
   }
 }

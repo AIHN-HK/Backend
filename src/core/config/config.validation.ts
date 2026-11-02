@@ -7,13 +7,38 @@ export const configValidationSchema = Joi.object({
   PORT: Joi.number().default(3000),
   API_VERSION: Joi.string().default('v1'),
   DATABASE_URL: Joi.string().required(),
-  JWT_ACCESS_SECRET: Joi.string().required(),
-  JWT_REFRESH_SECRET: Joi.string().required(),
-  JWT_ACCESS_EXPIRATION: Joi.string().default('15m'),
-  JWT_REFRESH_EXPIRATION: Joi.string().default('7d'),
+  JWT_ACCESS_SECRET: Joi.string()
+    .when('NODE_ENV', { is: 'production', then: Joi.string().min(32) })
+    .required(),
+  OTP_HASH_SECRET: Joi.string()
+    .empty('')
+    .when('NODE_ENV', { is: 'production', then: Joi.string().min(32) })
+    .optional(),
+  JWT_REFRESH_SECRET: Joi.string()
+    .when('NODE_ENV', {
+      is: 'production',
+      then: Joi.string().min(32).invalid(Joi.ref('JWT_ACCESS_SECRET')),
+    })
+    .required(),
+  JWT_ACCESS_EXPIRATION: Joi.string()
+    .pattern(/^[1-9]\d{0,5}[smhd]$/)
+    .default('15m'),
+  JWT_REFRESH_EXPIRATION: Joi.string()
+    .pattern(/^[1-9]\d{0,5}[smhd]$/)
+    .default('7d'),
   REDIS_HOST: Joi.string().default('localhost'),
   REDIS_PORT: Joi.number().default(6379),
   REDIS_PASSWORD: Joi.string().allow('', null).optional(),
+  AI_WS_URL: Joi.string()
+    .empty('')
+    .uri({ scheme: ['ws', 'wss'] })
+    .optional(),
+  AI_CONNECT_TIMEOUT_MS: Joi.number().integer().min(100).default(10000),
+  AI_IDLE_TIMEOUT_MS: Joi.number().integer().min(100).default(30000),
+  AI_MAX_DURATION_MS: Joi.number().integer().min(100).default(120000),
+  CHAT_TURN_LEASE_MS: Joi.number().integer().min(3000).default(600000),
+  CORS_ORIGINS: Joi.string().empty('').optional(),
+  TRUST_PROXY_HOPS: Joi.number().integer().min(0).default(0),
   LOGIN_MAX_CONCURRENT: Joi.number().integer().min(1).default(20),
   LOGIN_QUEUE_MAX_WAIT_MS: Joi.number().integer().min(1).default(1500),
   LOGIN_SLOT_LEASE_MS: Joi.number().integer().min(1000).default(30000),

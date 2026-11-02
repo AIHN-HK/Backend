@@ -16,13 +16,17 @@ model User {
   yob           DateTime
   phone         String?
   createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @default(now())
+  updatedAt     DateTime       @default(now()) @updatedAt
   address       String?
   gender        String?
   class         Int?
   attempts      Attempt[]
   chatSessions  ChatSession[]
   refreshTokens RefreshToken[]
+  careerProfile CareerProfile?
+  recommendations RecommendationRun[]
+  careerGoals CareerGoal[]
+  guestAssessmentClaims GuestAssessmentClaim[]
 }
 
 model Otp {
@@ -31,8 +35,12 @@ model Otp {
   type      OtpType
   expiresAt DateTime
   used      Boolean  @default(false)
+  failedAttempts Int @default(0)
   createdAt DateTime @default(now())
   id        Int      @id @default(autoincrement())
+
+  @@unique([email, type])
+  @@index([expiresAt])
 }
 
 model RefreshToken {
@@ -66,8 +74,22 @@ model Attempt {
   chatSessions   ChatSession[]
   result         Result?
   snapshots      SnapShot?
+  recommendations RecommendationRun[]
+  guestClaim GuestAssessmentClaim?
 
   @@index([userId, finishAt, createdAt, id])
+}
+
+model GuestAssessmentClaim {
+  id        String   @id
+  digest    String
+  userId    Int
+  attemptId Int      @unique
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempt   Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Answer {
@@ -133,7 +155,7 @@ model SnapShot {
 
 model Priority {
   id       Int    @id @default(autoincrement())
-  type     String
+  type     String @unique
   priority Int
 }
 
@@ -151,6 +173,20 @@ model TopCode {
 model SampleTable {
   id   Int    @id @default(autoincrement())
   name String
+}
+
+model AdminAuditLog {
+  id        Int      @id @default(autoincrement())
+  actorId   Int
+  action    String
+  entity    String
+  targetId  String
+  before    Json
+  after     Json
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entity, targetId, createdAt])
 }
 
 model HollandCase {
@@ -200,4 +236,87 @@ enum OtpType {
 enum ChatSessionStatus {
   ACTIVE
   CLOSED
+}
+
+// Career data is versioned, sourced and published independently of assessment scoring.
+model Career {
+  id String @id
+  title String
+  description String
+  riasec Json
+  sourceVersion String
+  sourceUrl String
+  active Boolean @default(true)
+  revision Int @default(1)
+  skills CareerSkill[]
+  profiles CareerProfile[]
+  goals CareerGoal[]
+}
+
+model Skill {
+  id String @id
+  name String
+  careers CareerSkill[]
+}
+
+model CareerSkill {
+  careerId String
+  skillId String
+  importance Float
+  level Float
+  career Career @relation(fields: [careerId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id])
+  @@id([careerId, skillId])
+}
+
+model CareerProfile {
+  userId Int @id
+  revision Int @default(1)
+  skills Json
+  interests Json?
+  targetCareerId String?
+  user User @relation(fields: [userId], references: [id])
+  target Career? @relation(fields: [targetCareerId], references: [id])
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model RecommendationRun {
+  id String @id @default(uuid())
+  userId Int
+  attemptId Int
+  algorithmVersion String
+  input Json
+  items Json
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id])
+  attempt Attempt @relation(fields: [attemptId], references: [id])
+  @@index([userId, createdAt, id])
+}
+
+model CareerGoal {
+  id String @id @default(uuid())
+  userId Int
+  careerId String
+  title String
+  revision Int @default(1)
+  evidence Json
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id])
+  career Career @relation(fields: [careerId], references: [id])
+  tasks GoalTask[]
+  @@unique([userId, careerId])
+}
+
+model GoalTask {
+  id String @id @default(uuid())
+  goalId String
+  skillId String
+  title String
+  evidence String @default("")
+  done Boolean @default(false)
+  position Int
+  phase Int @default(0)
+  kind String @default("practice")
+  goal CareerGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  @@index([goalId, position])
 }

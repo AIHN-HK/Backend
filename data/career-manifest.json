@@ -1,0 +1,16 @@
+{
+  "version": "O*NET 31.0",
+  "source": "https://www.onetcenter.org/database.html",
+  "license": "https://creativecommons.org/licenses/by/4.0/",
+  "attribution": "O*NET 31.0 Database, U.S. Department of Labor, Employment and Training Administration (USDOL/ETA). O*NET is a trademark of USDOL/ETA.",
+  "changes": "AIHN retains occupations with six OI dimensions; joins descriptions and at most eight highest-importance nonsuppressed skills; converts LV 0..7 to 0..5. Titles/descriptions retained in English. No VN salary/admissions claims. USDOL/ETA has not endorsed or tested these changes.",
+  "sourceSha256": {
+    "occupation_data.csv": "a09eae1d6609686e44e05b7290993a1c8b523d8ca224bc0eedc194c855c3ee02",
+    "career_interest_types.csv": "19f452d51b81a4d59389b500f85baf252563858f596124fe446dd436a9f41206",
+    "essential_skills.csv": "68c4d31d8c55077238395dca40cc4e6d32e6a608b5474bb8264b1f98ae415bd7",
+    "transferable_skills.csv": "f17d0419e818a3bf2f55076510c76c4aef01cc8f5aee2670d2f44f6f44ac60f7"
+  },
+  "datasetSha256": "daace5c123f9c80a037e3e5bb7a11996a822a81ff474c39a9b84c2eb33e9615a",
+  "careers": 923,
+  "skills": 35
+}

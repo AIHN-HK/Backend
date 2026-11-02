@@ -14,33 +14,37 @@ export class QuestionService {
     private readonly questionRepository: QuestionRepository,
     private readonly redisService: RedisService,
   ) {}
-  async createQuestion(questionDto: QuestionDto) {
+  async createQuestion(questionDto: QuestionDto, actorId?: number) {
     const result = mapQuestionToResponse(
-      await this.questionRepository.create(questionDto),
+      await this.questionRepository.create(questionDto, actorId),
     );
-    await this.redisService.del('questions:all');
+    await this.redisService.del('questions:all').catch(() => undefined);
     return result;
   }
 
-  async updateQuestion(id: number, questionDto: QuestionDto) {
+  async updateQuestion(id: number, questionDto: QuestionDto, actorId?: number) {
     try {
       await this.questionRepository.findByid(id);
       const result = mapQuestionToResponse(
-        await this.questionRepository.update(id, questionDto),
+        await this.questionRepository.update(id, questionDto, actorId),
       );
-      await this.redisService.del('questions:all'); // 👈 invalidate
+      await this.redisService.del('questions:all').catch(() => undefined);
       return result;
-    } catch {
-      throw new NotFoundException(`Question with id ${id} not found`);
+    } catch (error) {
+      if (error.code === 'P2025')
+        throw new NotFoundException(`Question with id ${id} not found`);
+      throw error;
     }
   }
-  async deleteQuestion(id: number) {
+  async deleteQuestion(id: number, actorId?: number) {
     try {
-      await this.questionRepository.remove(id);
-      await this.redisService.del('questions:all');
+      await this.questionRepository.remove(id, actorId);
+      await this.redisService.del('questions:all').catch(() => undefined);
       return { message: `Session ${id} deleted successfully` };
     } catch (error) {
-      throw new NotFoundException(`Question with id ${id} not found`);
+      if (error.code === 'P2025')
+        throw new NotFoundException(`Question with id ${id} not found`);
+      throw error;
     }
   }
   async findById(id: number) {
@@ -51,19 +55,18 @@ export class QuestionService {
     return mapQuestionToResponse(question);
   }
   async getAllQuestion() {
-    return this.redisService.getOrSet(
-      'questions:all',
-      3600, // 1 giờ
-      async () => {
-        const questions = await this.questionRepository.getALL();
-        return mapGroupedQuestionsToResponse(questions);
-      },
+    // A delayed old cache fill must not disagree with a new Attempt's count.
+    return mapGroupedQuestionsToResponse(
+      await this.questionRepository.getALL(),
     );
   }
 
-  async createMany(questions: CreateQuestionDto[]) {
-    const result = await this.questionRepository.createManyQuestion(questions);
-    await this.redisService.del('questions:all');
+  async createMany(questions: CreateQuestionDto[], actorId?: number) {
+    const result = await this.questionRepository.createManyQuestion(
+      questions,
+      actorId,
+    );
+    await this.redisService.del('questions:all').catch(() => undefined);
     return result;
   }
 }

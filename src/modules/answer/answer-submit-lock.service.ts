@@ -46,9 +46,12 @@ export class AnswerSubmitLockService {
     try {
       return await fn();
     } catch (err: any) {
-      const msg = String(err?.message || '');
-      if (msg.includes('already completed') || err?.code === 'P2002') {
-        throw new ConflictException('attempt has already been completed');
+      if (err?.code === 'P2002') {
+        throw new ConflictException({
+          code: 'SUBMISSION_CONFLICT',
+          message:
+            'Submission data already exists. Read the attempt before retrying.',
+        });
       }
 
       throw err;

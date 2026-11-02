@@ -1,18 +1,20 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { QuestionService } from './question.service';
 
-describe('QuestionService', () => {
-  let service: QuestionService;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [QuestionService],
-    }).compile();
-
-    service = module.get<QuestionService>(QuestionService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+describe('question writes after cache failure', () => {
+  it('returns a committed update even if legacy cache cleanup fails', async () => {
+    const row = { id: 1, content: 'Current', type: 'R', dimension: 'PERSONA' };
+    const repository: any = {
+      findByid: async () => row,
+      update: jest.fn(async () => row),
+    };
+    const service = new QuestionService(repository, {
+      del: async () => {
+        throw new Error('Redis unavailable');
+      },
+    } as any);
+    await expect(
+      service.updateQuestion(1, row as any, 9),
+    ).resolves.toMatchObject({ id: 1, content: 'Current' });
+    expect(repository.update).toHaveBeenCalledWith(1, row, 9);
   });
 });

@@ -1,4 +1,7 @@
 node_modules
+.pnpm-store
+.serena
+docs
 dist
 .env*
 !.env.example
@@ -9,5 +12,7 @@ README.md
 .vscode
 .idea
 coverage
+test-artifacts
+storage
 .nyc_output
 *.log

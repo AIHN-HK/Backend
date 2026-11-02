@@ -5,7 +5,7 @@ import {
   IsNotEmpty,
   IsString,
 } from 'class-validator';
-import { RiasecType } from 'src/core/constants/riasec.type';
+import { RiasecType } from '../../assessment';
 
 export class UpdateTopcodeBodyDto {
   @IsEnum(RiasecType)

@@ -1,0 +1,193 @@
+{
+  "algorithmVersion": "aihn-hybrid-1.0.0",
+  "weights": {
+    "riasec": 0.65,
+    "skills": 0.25,
+    "interests": 0.1
+  },
+  "dataset": "O*NET 31.0",
+  "careers": 923,
+  "method": "Synthetic sensitivity/ablation only; no accuracy, Precision@K or nDCG without expert relevance labels.",
+  "rows": [
+    {
+      "probe": "synthetic-R",
+      "hybridTop10": [
+        "47-2053.00",
+        "27-4015.00",
+        "37-3013.00",
+        "47-2161.00",
+        "51-9124.00",
+        "37-3011.00",
+        "53-7061.00",
+        "51-6091.00",
+        "49-3093.00",
+        "47-4051.00"
+      ],
+      "riasecOnlyTop10": [
+        "45-2093.00",
+        "47-2022.00",
+        "37-3011.00",
+        "47-2031.00",
+        "47-5051.00",
+        "37-3013.00",
+        "45-2092.00",
+        "47-2043.00",
+        "49-3091.00",
+        "47-2081.00"
+      ],
+      "overlapWithRiasecOnly": 0.2,
+      "overlapWithoutAdditionalInterests": 1,
+      "overlapAfterTenPointPerturbation": 0.9
+    },
+    {
+      "probe": "synthetic-I",
+      "hybridTop10": [
+        "15-2041.01",
+        "19-1041.00",
+        "29-1212.00",
+        "19-2041.03",
+        "19-3011.01",
+        "19-1042.00",
+        "29-1243.00",
+        "29-1242.00",
+        "19-1029.04",
+        "19-1011.00"
+      ],
+      "riasecOnlyTop10": [
+        "19-1041.00",
+        "19-1042.00",
+        "15-2041.01",
+        "19-3011.01",
+        "19-1029.04",
+        "15-1221.00",
+        "19-3091.00",
+        "19-2041.03",
+        "19-3011.00",
+        "19-1029.03"
+      ],
+      "overlapWithRiasecOnly": 0.6,
+      "overlapWithoutAdditionalInterests": 1,
+      "overlapAfterTenPointPerturbation": 0.6
+    },
+    {
+      "probe": "synthetic-A",
+      "hybridTop10": [
+        "27-2032.00",
+        "27-2042.00",
+        "27-1027.00",
+        "27-1013.00",
+        "27-1024.00",
+        "27-1014.00",
+        "27-1022.00",
+        "39-5091.00",
+        "27-1025.00",
+        "15-1255.01"
+      ],
+      "riasecOnlyTop10": [
+        "27-1014.00",
+        "27-1027.00",
+        "27-1024.00",
+        "27-1013.00",
+        "27-2042.00",
+        "27-3043.05",
+        "27-2032.00",
+        "27-1022.00",
+        "27-2011.00",
+        "27-2041.00"
+      ],
+      "overlapWithRiasecOnly": 0.7,
+      "overlapWithoutAdditionalInterests": 1,
+      "overlapAfterTenPointPerturbation": 0.8
+    },
+    {
+      "probe": "synthetic-S",
+      "hybridTop10": [
+        "25-9043.00",
+        "25-2012.00",
+        "39-9011.01",
+        "31-1122.00",
+        "39-7011.00",
+        "21-1021.00",
+        "25-3031.00",
+        "25-2011.00",
+        "21-1023.00",
+        "31-1133.00"
+      ],
+      "riasecOnlyTop10": [
+        "25-2031.00",
+        "25-2032.00",
+        "25-2023.00",
+        "25-3011.00",
+        "39-9011.01",
+        "25-3041.00",
+        "25-3021.00",
+        "25-2011.00",
+        "25-2021.00",
+        "25-3031.00"
+      ],
+      "overlapWithRiasecOnly": 0.3,
+      "overlapWithoutAdditionalInterests": 0.9,
+      "overlapAfterTenPointPerturbation": 0.8
+    },
+    {
+      "probe": "synthetic-E",
+      "hybridTop10": [
+        "11-1031.00",
+        "11-9179.02",
+        "41-1012.00",
+        "11-9071.00",
+        "11-1011.00",
+        "11-2011.00",
+        "35-1012.00",
+        "11-1021.00",
+        "11-9199.10",
+        "11-9151.00"
+      ],
+      "riasecOnlyTop10": [
+        "41-9011.00",
+        "11-2021.00",
+        "11-9041.00",
+        "41-3011.00",
+        "11-2011.00",
+        "11-1031.00",
+        "11-2033.00",
+        "11-1011.00",
+        "11-9199.10",
+        "11-2032.00"
+      ],
+      "overlapWithRiasecOnly": 0.4,
+      "overlapWithoutAdditionalInterests": 0.9,
+      "overlapAfterTenPointPerturbation": 0.9
+    },
+    {
+      "probe": "synthetic-C",
+      "hybridTop10": [
+        "43-4071.00",
+        "43-9022.00",
+        "43-3051.00",
+        "43-4121.00",
+        "43-3031.00",
+        "43-2011.00",
+        "43-3021.00",
+        "43-9021.00",
+        "43-9061.00",
+        "43-4021.00"
+      ],
+      "riasecOnlyTop10": [
+        "43-9022.00",
+        "43-4071.00",
+        "27-3092.00",
+        "43-3031.00",
+        "43-3021.00",
+        "43-9021.00",
+        "43-3051.00",
+        "13-2082.00",
+        "43-4021.00",
+        "23-2093.00"
+      ],
+      "overlapWithRiasecOnly": 0.7,
+      "overlapWithoutAdditionalInterests": 0.9,
+      "overlapAfterTenPointPerturbation": 0.9
+    }
+  ]
+}

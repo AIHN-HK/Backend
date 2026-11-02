@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { AttemptRepository } from '../attempt/attempt.repository';
-import { ScoreCalculatorService } from 'src/core/services/score-calculator.services';
+import type { Result } from '@prisma/client';
+import { AttemptRepository } from '../attempt';
+import { ScoreCalculatorService } from '../assessment';
 // import { RiasecCode } from 'src/core/constants/riasec.type';
 import { ResultRepository } from './result.repository';
-import { rankScores, ScoreItem } from 'src/core/services/rank_score';
-import { RiasecScore } from 'src/core/constants/riasec.type';
+import { rankScores, ScoreItem } from '../assessment';
+import { RiasecScore } from '../assessment';
 import { RedisService } from 'src/core/redis/redis.service';
 @Injectable()
 export class ResultService {
@@ -62,7 +63,9 @@ export class ResultService {
       );
     }
     if (!result) {
-      throw new Error(`Result for Attempt ID ${attemptId} does not exist.`);
+      throw new NotFoundException(
+        `Result for Attempt ID ${attemptId} does not exist.`,
+      );
     }
     const topCode = result.topCode;
     const score = this.buildScores(result);
@@ -78,12 +81,19 @@ export class ResultService {
     if (!analyzeResult) {
       throw new Error(`Analyze results not found for the top code`);
     }
+    if (!result.attempt.finishAt) throw new Error('Attempt unfinished');
     return {
       analyzeResult,
       finishAt: result.attempt.finishAt.toLocaleDateString('vi-VN'),
     };
   }
   async Getsnapshot(attemptId: number, userId: number) {
+    const owner = await this.attemptRepository.findByIdAndUser(
+      attemptId,
+      userId,
+    );
+    if (!owner)
+      throw new NotFoundException('Attempt does not belong to the user.');
     // const [belongsToUser, snapshot] = await Promise.all([
     //   this.attemptRepository.findByIdAndUser(attemptId, userId),
     //   this.resultRepository.getSnapshotByAttemptId(attemptId),
@@ -92,15 +102,6 @@ export class ResultService {
       `snapshot:${userId}:${attemptId}`,
       604800,
       async () => {
-        const belongsToUser = await this.attemptRepository.findByIdAndUser(
-          attemptId,
-          userId,
-        );
-        if (!belongsToUser) {
-          throw new NotFoundException(
-            `Attempt with ID ${attemptId} does not belong to the user.`,
-          );
-        }
         return this.resultRepository.getSnapshotByAttemptId(attemptId);
       },
     );
@@ -163,7 +164,12 @@ export class ResultService {
     return result;
   }
 
-  private buildScores(result: any): ScoreItem[] {
+  private buildScores(
+    result: Pick<
+      Result,
+      'scoreR' | 'scoreI' | 'scoreA' | 'scoreS' | 'scoreE' | 'scoreC'
+    >,
+  ): ScoreItem[] {
     return [
       { type: 'R', score: result.scoreR },
       { type: 'I', score: result.scoreI },

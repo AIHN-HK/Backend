@@ -1,25 +1,30 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Logger, Module } from '@nestjs/common';
 import Redis from 'ioredis';
 import { RedisService } from './redis.service';
+import { ConfigService } from '@nestjs/config';
+import { redisOptions } from '../config/redis.options';
 
 @Global()
 @Module({
   providers: [
     {
       provide: 'REDIS_CLIENT',
-      useFactory: async () => {
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const logger = new Logger('Redis');
         const redis = new Redis({
-          host: process.env.REDIS_HOST || 'localhost',
-          port: parseInt(process.env.REDIS_PORT || '6379'),
-          password: process.env.REDIS_PASSWORD || undefined,
+          ...redisOptions(config),
+          maxRetriesPerRequest: 1,
+          commandTimeout: 2000,
+          enableOfflineQueue: false,
         });
 
         redis.on('connect', () => {
-          console.log('✅ Redis connected');
+          logger.log('Redis connected');
         });
 
-        redis.on('error', (err) => {
-          console.error('❌ Redis error:', err);
+        redis.on('error', () => {
+          logger.error('Redis connection unavailable');
         });
 
         return redis;

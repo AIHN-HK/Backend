@@ -1,10 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { RiasecCode, RiasecScore } from '../constants/riasec.type';
+import { RiasecCode, RiasecScore } from './riasec.types';
 
 interface ScoreInput {
   type: RiasecCode;
 }
-@Injectable()
 export class ScoreCalculatorService {
   calculateScores(answers: ScoreInput[]) {
     const score: RiasecScore = {
